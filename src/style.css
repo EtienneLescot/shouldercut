@@ -1,0 +1,122 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #0d0f12;
+  color: #e7eaf0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+#app { max-width: 1180px; margin: 0 auto; padding: 18px; }
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+h1 { margin: 0; font-size: 28px; font-weight: 650; letter-spacing: 0; }
+p { margin: 5px 0 0; color: #aeb6c4; font-size: 14px; }
+button, .file-button {
+  border: 1px solid #3a424f;
+  background: #1b2027;
+  color: #e7eaf0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+button:disabled { cursor: not-allowed; opacity: 0.45; }
+.file-button { white-space: nowrap; background: #245c43; border-color: #2d7353; }
+.stage {
+  position: relative;
+  background: #000;
+  border: 1px solid #2b313b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; }
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #aeb6c4;
+  pointer-events: none;
+}
+.empty.hidden, .drop-hint.hidden { display: none; }
+.stage.drag-over { outline: 2px solid #35a06f; outline-offset: -2px; }
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(13, 15, 18, 0.72);
+  color: #fff;
+  font-size: 20px;
+  pointer-events: none;
+}
+.controls { margin-top: 12px; border: 1px solid #2b313b; border-radius: 8px; padding: 12px; background: #14181e; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.seek-time { display: flex; align-items: center; gap: 6px; color: #aeb6c4; font-size: 13px; }
+.seek-time input {
+  width: 110px;
+  border: 1px solid #3a424f;
+  background: #0d0f12;
+  color: #e7eaf0;
+  border-radius: 5px;
+  padding: 7px;
+  font: inherit;
+}
+#timeline { width: 100%; margin: 14px 0 8px; accent-color: #35a06f; }
+.readout {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 8px 0 0;
+}
+.readout div { min-width: 0; }
+.readout dt { color: #8f98a6; font-size: 12px; margin-bottom: 3px; }
+.readout dd { margin: 0; font-family: Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+.error { color: #ff9a9a; min-height: 18px; }
+.agent-panel { margin-top: 12px; border: 1px solid #2b313b; border-radius: 8px; padding: 12px; background: #14181e; }
+.agent-head, .effects-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-head h2 { margin: 0; font-size: 18px; }
+.agent-head span { color: #8f98a6; font-size: 12px; font-family: Consolas, monospace; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; max-height: 280px; overflow: auto; }
+.message { max-width: 82%; padding: 8px 10px; border: 1px solid #333b47; border-radius: 7px; background: #1a1f27; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message.user { align-self: flex-end; background: #213829; border-color: #2d7353; }
+.message.agent { align-self: flex-start; }
+.chat-form { display: flex; gap: 8px; align-items: stretch; }
+.chat-form textarea {
+  flex: 1;
+  resize: vertical;
+  border: 1px solid #3a424f;
+  border-radius: 6px;
+  background: #0d0f12;
+  color: #e7eaf0;
+  padding: 9px;
+  font: inherit;
+}
+.chat-form input[type="text"] {
+  flex: 1;
+  border: 1px solid #3a424f;
+  border-radius: 6px;
+  background: #0d0f12;
+  color: #e7eaf0;
+  padding: 9px;
+  font: inherit;
+}
+.effects-head { margin-top: 16px; }
+.effects-head h3 { margin: 0; font-size: 15px; }
+.effects-list { margin-top: 8px; color: #aeb6c4; }
+.effect-item { border-top: 1px solid #2b313b; padding: 8px 0; }
+.effect-item summary { cursor: pointer; color: #e7eaf0; }
+.effect-item pre { overflow: auto; max-height: 320px; background: #0d0f12; padding: 10px; border-radius: 6px; font-size: 11px; }
+.effect-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; color: #8f98a6; font-size: 12px; }
+@media (max-width: 760px) {
+  .topbar { align-items: start; flex-direction: column; }
+  .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

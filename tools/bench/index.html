@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>ShoulderCut WebGPU bench</title>
+<style>
+  body { margin: 0; background: #101216; color: #e8eaf0; font-family: Consolas, monospace; }
+  header { padding: 10px 14px; font-size: 13px; }
+  #screen { display: block; width: 960px; height: 540px; background: #000; }
+  #report { white-space: pre-wrap; font-size: 12px; padding: 10px 14px; }
+  #fault { color: #ff8f8f; white-space: pre-wrap; padding: 0 14px; }
+  video { display: none; }
+</style>
+</head>
+<body>
+<header>ShoulderCut bench — WebGPU preview, per-pass GPU timing. Params: src, seconds, rate, vf, maskUpload.</header>
+<canvas id="screen" width="1920" height="1080"></canvas>
+<div id="fault"></div>
+<pre id="report">starting</pre>
+<video id="clip" muted loop playsinline autoplay></video>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const SRC = q.get('src') || 'assets/test-1080p.mp4';
+const MEASURE_S = Number(q.get('seconds') || 5);
+const RATE = Number(q.get('rate') || 1);
+const USE_VIDEO_FRAME = q.get('vf') === '1';
+const MASK_UPLOAD = q.get('maskUpload') === '1';
+const reportEl = document.getElementById('report');
+const faultEl = document.getElementById('fault');
+const bench = { tool: 'shouldercut-webgpu-bench', version: 2, src: SRC, faults: [] };
+window.__BENCH = bench;
+function publish() { reportEl.textContent = JSON.stringify(bench, null, 2); }
+function fault(message) {
+  bench.faults.push(String(message));
+  faultEl.textContent += String(message) + '\n';
+  console.error(message);
+  publish();
+}
+window.addEventListener('error', (e) => fault('window: ' + e.message));
+window.addEventListener('unhandledrejection', (e) => fault('promise: ' + e.reason));
+
+const VERTEX = `
+struct VertOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
+@vertex fn vertexMain(@builtin(vertex_index) index: u32) -> VertOut {
+  var points = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  let xy = points[index];
+  var out: VertOut;
+  out.position = vec4f(xy, 0.0, 1.0);
+  out.uv = vec2f((xy.x + 1.0) * 0.5, 1.0 - (xy.y + 1.0) * 0.5);
+  return out;
+}
+`;
+const INGEST_WGSL = VERTEX + `
+@group(0) @binding(0) var linearSampler: sampler;
+@group(0) @binding(1) var externalFrame: texture_external;
+@fragment fn fragmentMain(input: VertOut) -> @location(0) vec4f {
+  let source = textureSampleBaseClampToEdge(externalFrame, linearSampler, input.uv);
+  var graded = (source.rgb - vec3f(0.5)) * 1.12 + vec3f(0.515, 0.5, 0.485);
+  graded = clamp(graded, vec3f(0.0), vec3f(1.0));
+  return vec4f(graded, 1.0);
+}
+`;
+const BLUR_WGSL = VERTEX + `
+@group(0) @binding(0) var linearSampler: sampler;
+@group(0) @binding(1) var sharpTexture: texture_2d<f32>;
+@fragment fn fragmentMain(input: VertOut) -> @location(0) vec4f {
+  let size = vec2f(textureDimensions(sharpTexture));
+  let texel = vec2f(1.5) / size;
+  var sum = vec3f(0.0);
+  var weightTotal = 0.0;
+  for (var ix = -2; ix <= 2; ix = ix + 1) {
+    for (var iy = -2; iy <= 2; iy = iy + 1) {
+      let offset = vec2f(f32(ix) * texel.x, f32(iy) * texel.y);
+      let weight = 1.0 / (1.0 + abs(f32(ix)) + abs(f32(iy)));
+      sum = sum + textureSampleLevel(sharpTexture, linearSampler, input.uv + offset, 0.0).rgb * weight;
+      weightTotal = weightTotal + weight;
+    }
+  }
+  return vec4f(sum / weightTotal, 1.0);
+}
+`;
+const COMPOSE_HEAD = VERTEX + `
+struct MaskUniform {
+  center: vec2f,
+  radius: f32,
+  feather: f32,
+};
+@group(0) @binding(0) var linearSampler: sampler;
+@group(0) @binding(1) var sharpTexture: texture_2d<f32>;
+@group(0) @binding(2) var blurTexture: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> maskParams: MaskUniform;
+fn finishCompose(uv: vec2f, maskValue: f32) -> vec4f {
+  let sharp = textureSampleLevel(sharpTexture, linearSampler, uv, 0.0).rgb;
+  let blurred = textureSampleLevel(blurTexture, linearSampler, uv, 0.0).rgb;
+  let separated = mix(blurred * vec3f(0.82, 0.88, 1.05), sharp, maskValue);
+  let luma = dot(blurred, vec3f(0.299, 0.587, 0.114));
+  var colour = separated + blurred * maskValue * 0.35 * smoothstep(0.4, 1.0, luma);
+  let centred = distance(uv, vec2f(0.5));
+  colour = colour * (1.0 - 0.28 * smoothstep(0.48, 0.95, centred));
+  return vec4f(clamp(colour, vec3f(0.0), vec3f(1.0)), 1.0);
+}
+`;
+const COMPOSE_PROC_WGSL = COMPOSE_HEAD + `
+@fragment fn fragmentMain(input: VertOut) -> @location(0) vec4f {
+  let dims = vec2f(textureDimensions(sharpTexture));
+  let aspect = dims.x / dims.y;
+  let rel = (input.uv - maskParams.center) * vec2f(aspect, 1.0);
+  let dist = length(rel);
+  let inner = maskParams.radius - maskParams.feather;
+  let outer = maskParams.radius + maskParams.feather;
+  let maskValue = 1.0 - smoothstep(inner, outer, dist);
+  return finishCompose(input.uv, maskValue);
+}
+`;
+const COMPOSE_TEX_WGSL = COMPOSE_HEAD + `
+@group(0) @binding(4) var maskTexture: texture_2d<f32>;
+@fragment fn fragmentMain(input: VertOut) -> @location(0) vec4f {
+  let sampledMask = textureSampleLevel(maskTexture, linearSampler, input.uv, 0.0).r;
+  let edgeLow = 0.5 - maskParams.feather;
+  let edgeHigh = 0.5 + maskParams.feather;
+  let maskValue = smoothstep(edgeLow, edgeHigh, sampledMask);
+  return finishCompose(input.uv, maskValue);
+}
+`;
+
+function summarise(samples) {
+  const ordered = [...samples].sort((a, b) => a - b);
+  if (!ordered.length) return { n: 0, avgMs: null, p50Ms: null, p95Ms: null, maxMs: null };
+  const pick = (p) => ordered[Math.min(ordered.length - 1, Math.floor(p * ordered.length))];
+  const round = (v) => Number(v.toFixed(4));
+  return {
+    n: ordered.length,
+    avgMs: round(ordered.reduce((a, b) => a + b, 0) / ordered.length),
+    p50Ms: round(pick(0.5)),
+    p95Ms: round(pick(0.95)),
+    maxMs: round(ordered[ordered.length - 1]),
+  };
+}
+async function compileChecked(device, label, code) {
+  const shaderModule = device.createShaderModule({ label, code });
+  const details = await shaderModule.getCompilationInfo();
+  const errors = details.messages.filter((m) => m.type === 'error');
+  if (errors.length) {
+    throw new Error(label + ': ' + errors.map((m) => m.lineNum + ':' + m.linePos + ' ' + m.message).join(' | '));
+  }
+  return shaderModule;
+}
+function pipelineFor(device, label, shaderModule, targetFormat) {
+  return device.createRenderPipeline({
+    label,
+    layout: 'auto',
+    vertex: { module: shaderModule, entryPoint: 'vertexMain' },
+    fragment: { module: shaderModule, entryPoint: 'fragmentMain', targets: [{ format: targetFormat }] },
+    primitive: { topology: 'triangle-list' },
+  });
+}
+function makeMaskBytes(width, height) {
+  const bytes = new Uint8Array(width * height);
+  const cx = width * 0.5;
+  const cy = height * 0.52;
+  const radius = height * 0.32;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const soft = Math.max(0, Math.min(1, (radius + 18 - d) / 36));
+      bytes[y * width + x] = Math.round(soft * 255);
+    }
+  }
+  return bytes;
+}
+
+async function initialise(canvas) {
+  if (!navigator.gpu) throw new Error('WebGPU unavailable in this browser');
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) throw new Error('No WebGPU adapter returned');
+  bench.adapter = {
+    vendor: adapter.info.vendor || '',
+    architecture: adapter.info.architecture || '',
+    fallback: Boolean(adapter.isFallbackAdapter),
+    timestampQuery: adapter.features.has('timestamp-query'),
+  };
+  const wanted = adapter.features.has('timestamp-query') ? ['timestamp-query'] : [];
+  const device = await adapter.requestDevice({ requiredFeatures: wanted });
+  device.addEventListener('uncapturederror', (event) => fault('WebGPU: ' + event.error.message));
+  device.lost.then((info) => { if (info.reason !== 'destroyed') fault('Device lost: ' + info.message); });
+  const context = canvas.getContext('webgpu');
+  const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+  context.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
+  const workFormat = 'rgba8unorm';
+  const ingestModule = await compileChecked(device, 'bench-ingest', INGEST_WGSL);
+  const blurModule = await compileChecked(device, 'bench-blur', BLUR_WGSL);
+  const composeModule = await compileChecked(
+    device,
+    MASK_UPLOAD ? 'bench-compose-mask-texture' : 'bench-compose-procedural-mask',
+    MASK_UPLOAD ? COMPOSE_TEX_WGSL : COMPOSE_PROC_WGSL,
+  );
+  return {
+    device,
+    context,
+    canvasFormat,
+    workFormat,
+    sampler: device.createSampler({ label: 'bench-linear', magFilter: 'linear', minFilter: 'linear' }),
+    ingestPipe: pipelineFor(device, 'bench-ingest', ingestModule, workFormat),
+    blurPipe: pipelineFor(device, 'bench-blur', blurModule, workFormat),
+    composePipe: pipelineFor(device, 'bench-compose', composeModule, canvasFormat),
+    timestamps: device.features.has('timestamp-query'),
+  };
+}
+
+function runMeasurement(gpu, clip) {
+  return new Promise((resolve) => {
+    const { device, context, workFormat, sampler, ingestPipe, blurPipe, composePipe, timestamps } = gpu;
+    const width = clip.videoWidth;
+    const height = clip.videoHeight;
+    const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING;
+    const sharpTex = device.createTexture({ label: 'bench-sharp', size: { width, height }, format: workFormat, usage });
+    const blurTex = device.createTexture({ label: 'bench-blur', size: { width, height }, format: workFormat, usage });
+    const sharpView = sharpTex.createView();
+    const blurView = blurTex.createView();
+    const uniformBuffer = device.createBuffer({
+      label: 'bench-mask-uniform',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    const maskWidth = 480;
+    const maskHeight = 270;
+    const maskBytes = MASK_UPLOAD ? makeMaskBytes(maskWidth, maskHeight) : null;
+    const maskTex = MASK_UPLOAD ? device.createTexture({
+      label: 'bench-uploaded-mask',
+      size: { width: maskWidth, height: maskHeight },
+      format: 'r8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    }) : null;
+    const queryCount = 6;
+    const querySet = timestamps ? device.createQuerySet({ label: 'bench-pass-times', type: 'timestamp', count: queryCount }) : null;
+    const resolveBuffer = timestamps ? device.createBuffer({
+      label: 'bench-query-resolve',
+      size: queryCount * 8,
+      usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+    }) : null;
+    const stagingPool = [];
+    if (timestamps) {
+      for (let i = 0; i < 6; i += 1) {
+        stagingPool.push(device.createBuffer({
+          label: 'bench-query-staging-' + i,
+          size: queryCount * 8,
+          usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+        }));
+      }
+    }
+    const intervalsMs = [];
+    const submitMs = [];
+    const gpuIngestMs = [];
+    const gpuBlurMs = [];
+    const gpuComposeMs = [];
+    const gpuTotalMs = [];
+    const pendingReads = [];
+    let seenFrames = 0;
+    let presented = 0;
+    let recordingStart = 0;
+    let previousNow = 0;
+    let stagingIndex = 0;
+    let halted = false;
+    async function finish() {
+      if (halted) return;
+      halted = true;
+      await Promise.allSettled(pendingReads);
+      const elapsedS = intervalsMs.reduce((a, b) => a + b, 0) / 1000;
+      resolve({
+        width,
+        height,
+        input: USE_VIDEO_FRAME ? 'VideoFrame(video)' : 'HTMLVideoElement',
+        maskMode: MASK_UPLOAD ? 'uploaded r8 texture every frame (480x270)' : 'procedural shader mask',
+        playbackRate: RATE,
+        measuredFrames: intervalsMs.length,
+        presentedFrames: presented,
+        fps: elapsedS > 0 ? Number((intervalsMs.length / elapsedS).toFixed(2)) : null,
+        frameInterval: summarise(intervalsMs),
+        jsSubmit: summarise(submitMs),
+        gpuPassMs: {
+          ingestGrade: summarise(gpuIngestMs),
+          blur: summarise(gpuBlurMs),
+          composeMaskGlow: summarise(gpuComposeMs),
+          totalMeasuredPasses: summarise(gpuTotalMs),
+        },
+      });
+    }
+    function readTimestamps(staging) {
+      const done = staging.mapAsync(GPUMapMode.READ).then(() => {
+        const values = new BigInt64Array(staging.getMappedRange().slice(0));
+        staging.unmap();
+        const ms = (a, b) => Number(values[b] - values[a]) / 1000000;
+        if (values[0] > 0n && values[5] >= values[0]) {
+          gpuIngestMs.push(ms(0, 1));
+          gpuBlurMs.push(ms(2, 3));
+          gpuComposeMs.push(ms(4, 5));
+          gpuTotalMs.push(ms(0, 5));
+        }
+      }).catch((e) => fault('timestamp read: ' + e.message));
+      pendingReads.push(done);
+    }
+    function passDescriptor(view, beginIndex, endIndex) {
+      const descriptor = { colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store' }] };
+      if (timestamps) {
+        descriptor.timestampWrites = {
+          querySet,
+          beginningOfPassWriteIndex: beginIndex,
+          endOfPassWriteIndex: endIndex,
+        };
+      }
+      return descriptor;
+    }
+    function onVideoFrame(now, metadata) {
+      if (halted) return;
+      if (clip.readyState < 2) { clip.requestVideoFrameCallback(onVideoFrame); return; }
+      const started = performance.now();
+      let videoFrame = null;
+      try {
+        const cx = 0.5 + 0.16 * Math.sin(clip.currentTime * 0.7);
+        const cy = 0.52 + 0.07 * Math.cos(clip.currentTime * 0.9);
+        device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([cx, cy, 0.34, 0.07]));
+        if (MASK_UPLOAD && maskTex && maskBytes) {
+          device.queue.writeTexture(
+            { texture: maskTex },
+            maskBytes,
+            { bytesPerRow: maskWidth, rowsPerImage: maskHeight },
+            { width: maskWidth, height: maskHeight },
+          );
+        }
+        let importSource = clip;
+        if (USE_VIDEO_FRAME) { videoFrame = new VideoFrame(clip); importSource = videoFrame; }
+        const external = device.importExternalTexture({ label: 'bench-frame', source: importSource });
+        const encoder = device.createCommandEncoder({ label: 'bench-frame' });
+        let pass = encoder.beginRenderPass(passDescriptor(sharpView, 0, 1));
+        pass.setPipeline(ingestPipe);
+        pass.setBindGroup(0, device.createBindGroup({
+          layout: ingestPipe.getBindGroupLayout(0),
+          entries: [{ binding: 0, resource: sampler }, { binding: 1, resource: external }],
+        }));
+        pass.draw(3);
+        pass.end();
+        pass = encoder.beginRenderPass(passDescriptor(blurView, 2, 3));
+        pass.setPipeline(blurPipe);
+        pass.setBindGroup(0, device.createBindGroup({
+          layout: blurPipe.getBindGroupLayout(0),
+          entries: [{ binding: 0, resource: sampler }, { binding: 1, resource: sharpView }],
+        }));
+        pass.draw(3);
+        pass.end();
+        const composeEntries = [
+          { binding: 0, resource: sampler },
+          { binding: 1, resource: sharpView },
+          { binding: 2, resource: blurView },
+          { binding: 3, resource: { buffer: uniformBuffer } },
+        ];
+        if (MASK_UPLOAD && maskTex) composeEntries.push({ binding: 4, resource: maskTex.createView() });
+        pass = encoder.beginRenderPass(passDescriptor(context.getCurrentTexture().createView(), 4, 5));
+        pass.setPipeline(composePipe);
+        pass.setBindGroup(0, device.createBindGroup({
+          layout: composePipe.getBindGroupLayout(0),
+          entries: composeEntries,
+        }));
+        pass.draw(3);
+        pass.end();
+        const sampleGpu = timestamps && seenFrames > 30 && seenFrames % 10 === 0;
+        let staging = null;
+        if (timestamps) {
+          encoder.resolveQuerySet(querySet, 0, queryCount, resolveBuffer, 0);
+          if (sampleGpu) {
+            staging = stagingPool[stagingIndex % stagingPool.length];
+            stagingIndex += 1;
+            encoder.copyBufferToBuffer(resolveBuffer, 0, staging, 0, queryCount * 8);
+          }
+        }
+        device.queue.submit([encoder.finish()]);
+        if (staging) readTimestamps(staging);
+        if (videoFrame) videoFrame.close();
+      } catch (error) {
+        if (videoFrame) videoFrame.close();
+        fault('frame: ' + error.message);
+        finish();
+        return;
+      }
+      const submitted = performance.now();
+      seenFrames += 1;
+      presented = metadata ? metadata.presentedFrames : seenFrames;
+      if (seenFrames === 31) { recordingStart = now; previousNow = now; }
+      if (seenFrames > 31) {
+        intervalsMs.push(now - previousNow);
+        submitMs.push(submitted - started);
+        previousNow = now;
+        if ((now - recordingStart) / 1000 >= MEASURE_S) { finish(); return; }
+      }
+      clip.requestVideoFrameCallback(onVideoFrame);
+    }
+    clip.requestVideoFrameCallback(onVideoFrame);
+    setTimeout(finish, (MEASURE_S + 25) * 1000);
+  });
+}
+
+async function boot() {
+  const canvas = document.getElementById('screen');
+  const gpu = await initialise(canvas);
+  const clip = document.getElementById('clip');
+  clip.src = SRC;
+  await new Promise((ready, reject) => {
+    clip.addEventListener('loadedmetadata', ready, { once: true });
+    clip.addEventListener('error', () => reject(new Error('Could not load ' + SRC)), { once: true });
+  });
+  bench.clip = { width: clip.videoWidth, height: clip.videoHeight, duration: clip.duration };
+  canvas.width = clip.videoWidth;
+  canvas.height = clip.videoHeight;
+  gpu.context.configure({ device: gpu.device, format: gpu.canvasFormat, alphaMode: 'opaque' });
+  clip.playbackRate = RATE;
+  await clip.play();
+  bench.result = await runMeasurement(gpu, clip);
+  bench.done = true;
+  bench.userAgent = navigator.userAgent;
+  publish();
+  document.title = 'BENCH_DONE';
+  console.log('BENCH_DONE');
+}
+boot().catch((error) => {
+  fault('boot: ' + error.message);
+  bench.done = true;
+  publish();
+  document.title = 'BENCH_DONE';
+});
+</script>
+</body>
+</html>

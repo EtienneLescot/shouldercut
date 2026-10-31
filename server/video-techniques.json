@@ -1,0 +1,505 @@
+{
+ "version": 1,
+ "researched": "2026-10-28",
+ "notes": "State of the art as reachable by API for ShoulderCut. status: implemented = wired in this repo today; available = callable with the configured fal key but not yet wired; planned = needs a new key, backend or product step. Rankings: Artificial Analysis video leaderboards, Oct 2026 snapshots. Prices are provider list indications, re-verify before spending.",
+ "techniques": [
+  {
+   "id": "text_to_video_insert",
+   "name": "Generated insert / from-scratch shot",
+   "userCues": [
+    "ajoute un plan",
+    "genere un plan",
+    "insert",
+    "b-roll",
+    "from scratch",
+    "cree une video de",
+    "plan de"
+   ],
+   "task": "Create a new shot that does not exist in the source footage, to cut into the edit or stand alone.",
+   "inputs": [
+    "prompt"
+   ],
+   "guidance": [
+    "prompt",
+    "seed"
+   ],
+   "workflow": [
+    "generate_shot(prompt)",
+    "get_generation_job(id)",
+    "present result as a new clip"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "bytedance/seedance-2.0/fast/text-to-video",
+     "status": "implemented",
+     "price": "fast tier, per-second; validation settings 480p/4s/no-audio in code",
+     "ranking": "Seedance family top group in text-to-video Elo"
+    },
+    {
+     "provider": "fal",
+     "model": "alibaba/wan-3.0/text-to-video",
+     "status": "available",
+     "price": "per-second, tiered",
+     "ranking": "#1 text-to-video (1174) and #1 video editing (1198), no source-footage edit endpoint"
+    }
+   ],
+   "risks": [
+    "No continuity with adjacent real shots unless references are used",
+    "Native audio off in validation settings"
+   ],
+   "economicalTest": "480p, 4 s, fast tier, one attempt"
+  },
+  {
+   "id": "instruction_video_edit",
+   "name": "Whole-frame instruction edit",
+   "userCues": [
+    "change",
+    "transforme",
+    "remplace",
+    "mets",
+    "relight",
+    "relooke",
+    "en hiver",
+    "de nuit"
+   ],
+   "task": "Transform existing footage from a sentence, letting the model re-render the whole frame coherently (light, shadows, occlusions).",
+   "inputs": [
+    "source segment",
+    "prompt",
+    "optional reference images"
+   ],
+   "guidance": [
+    "prompt",
+    "reference images (@Image)",
+    "elements (@Element)",
+    "seed"
+   ],
+   "workflow": [
+    "track_object(subject) when a subject is named",
+    "show_working_preview(subject)",
+    "edit_segment or provider edit call with reference image",
+    "recomposite through dilated SAM mask locally",
+    "clear_working_preview()"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "fal-ai/kling-video/o3/pro/video-to-video/edit",
+     "status": "available",
+     "price": "$0.168/s",
+     "ranking": "outside editing top 9; element-based replacement is its strength"
+    },
+    {
+     "provider": "fal",
+     "model": "alibaba/happy-horse/video-edit",
+     "status": "available",
+     "price": "$0.28/s at 720p (input+output)",
+     "ranking": "HappyHorse-1.0 #6 video editing (1090)"
+    },
+    {
+     "provider": "runway",
+     "model": "aleph2 (Aleph 2.0)",
+     "status": "planned",
+     "price": "$0.28/s, $0.56 minimum; needs RUNWAYML_API_SECRET",
+     "ranking": "#9 video editing (1012); purpose-built in-context editing"
+    },
+    {
+     "provider": "google",
+     "model": "Gemini Omni Flash 1.1 edit",
+     "status": "planned",
+     "price": "Google API pricing to confirm",
+     "ranking": "#4 video editing (1148); conversational editing"
+    }
+   ],
+   "risks": [
+    "Whole frame is regenerated: identity/background drift outside the target",
+    "Mitigate by local recomposite through a dilated, feathered mask (never the raw SAM edge)"
+   ],
+   "economicalTest": "Shorten segment to ~3 s around the action peak, lowest resolution tier, one attempt"
+  },
+  {
+   "id": "masked_inpaint_edit",
+   "name": "Masked inpainting edit (native mask video)",
+   "userCues": [
+    "supprime",
+    "efface",
+    "retire",
+    "enleve",
+    "remplace uniquement",
+    "que lui",
+    "que elle",
+    "sans toucher au reste"
+   ],
+   "task": "Generate only inside a SAM mask video; everything outside is preserved by the model and again by our recomposite.",
+   "inputs": [
+    "source segment",
+    "SAM mask video",
+    "prompt",
+    "optional reference image"
+   ],
+   "guidance": [
+    "mask video (white = generate)",
+    "mask image (single, salient tracking)",
+    "reference images",
+    "ControlNet-style control videos in the VACE family (depth/reframe endpoints)",
+    "negative prompt",
+    "seed"
+   ],
+   "workflow": [
+    "track_object(subject)",
+    "show_working_preview(subject)",
+    "edit_segment(start, end, refImageUrl?)",
+    "get_generation_job(id)",
+    "clear_working_preview()"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "fal-ai/wan-vace-14b/inpainting",
+     "status": "implemented",
+     "price": "$0.04/s at 480p (81-frame/16fps units)",
+     "ranking": "Wan 2.x generation; only shortlisted model with native mask-video input"
+    }
+   ],
+   "risks": [
+    "Weakest image quality of the shortlist (proven on the demo: timid transformation without reference + negative prompt)",
+    "Seams, and shadows/contacts outside the mask stay those of the original body: dilate the recomposite mask over shadow/contact zones"
+   ],
+   "economicalTest": "81 frames at 16 fps, 480p, fixed seed (done on bedroom.mp4, ~$0.20)"
+  },
+  {
+   "id": "character_replace_motion",
+   "name": "Character replacement driven by the source motion",
+   "userCues": [
+    "en robot",
+    "en chevalier",
+    "en monstre",
+    "devient un",
+    "deviennent des",
+    "transforme le en",
+    "transforme les en",
+    "remplace le personnage",
+    "remplace la par"
+   ],
+   "task": "A new character re-performs the source footage: appearance comes from a character image, motion and scene integration from the source video.",
+   "inputs": [
+    "source segment (motion driver)",
+    "character image (reference or edited keyframe)"
+   ],
+   "guidance": [
+    "character image",
+    "source video as pose/motion driver",
+    "guidance_scale",
+    "seed"
+   ],
+   "workflow": [
+    "track_object(subject) to bound the subject and build assets",
+    "build the character image (Muse Image or flux reference, or edited keyframe)",
+    "REFRAME the character image so the character occupies the same fraction of frame height as the subject in the source (SCAIL-2 rule: reference framing controls output scale)",
+    "show_working_preview(subject)",
+    "provider character-replace call: SCAIL-2 (reference workflow) or fal Recast; NOT mask-inpainting",
+    "keep the provider raw output; do not mask-recomposite SCAIL/Recast output (halo, broken contact/occlusion)",
+    "clear_working_preview()"
+   ],
+   "backends": [
+    {
+     "provider": "local ComfyUI via ShoulderCut repertoire (server/comfy-workflows/)",
+     "model": "scail2-character-replacement (edit_segment backend scail)",
+     "status": "implemented",
+     "price": "local GPU time",
+     "ranking": "Purpose-built for this exact job and the current community/official reference: SAM3 tracking + SCAIL2ColoredMask (no pose skeleton), WanSCAILToVideo replacement_mode=true, pose_strength 1, lightx2v distill LoRA 0.8 + SCAIL DPO LoRA 1.0, ModelSamplingSD3 shift 5, euler/simple 6 steps CFG 1. Rules: reference framing controls output scale (reframe to subject frame-height fraction); describe the RESULT in the prompt, not an instruction; leave raw output un-composited. TESTED 2026-10-30 locally (RTX 4070 Ti 12GB, int8 template settings, 960x544, 65 frames, ~57 s/step, 6 steps): identity stable and background preserved, screen position/trajectory follow the source, but body orientation still drifts toward camera vs the side-profile source. Fidelity gain over Recast is position/scale, not orientation lock."
+    },
+    {
+     "provider": "fal",
+     "model": "minimax/h3-max/recast",
+     "status": "implemented-tested",
+     "price": "$0.30/s at 768P, $0.45/s at 1080P; source 5-30 s, single shot <= 15 s",
+     "ranking": "TESTED 2026-10-29 on easy stock clip (woman walking on hill -> robot reference): robot identity stable across 5 s (grey metal body, orange joints, cyan eyes, antenna), scene and ground integration convincing, output 1344x768 24 fps. Caveat: the robot re-performs facing camera rather than keeping the exact side profile of the source walk. First backend that passes the visual bar for full character replacement. RETEST 2026-10-29 with hardened side-profile prompt: orientation NOT corrected (robot still performs facing camera). Prompt wording cannot fix performance fidelity on this backend; use SCAIL-2 for frame-tracked fidelity."
+    },
+    {
+     "provider": "fal",
+     "model": "fal-ai/wan/v2.2-14b/animate/replace",
+     "status": "available-tested-weak",
+     "price": "$0.04/s at 480p in 16-frame units",
+     "ranking": "Tested 2026-10-29: ghostly/translucent result on real footage. Hosted endpoint exposes none of the ComfyUI WanVideoAnimateEmbeds tuning (pose_strength, face_strength, relight LoRA). Prefer SCAIL-2/Recast."
+    },
+    {
+     "provider": "fal",
+     "model": "fal-ai/kling-video/v3/pro/motion-control",
+     "status": "available",
+     "price": "$0.168/s",
+     "ranking": "Strong motion transfer; character_orientation image|video"
+    }
+   ],
+   "risks": [
+    "One character per call in practice; two subjects may need two passes",
+    "Character image proportions drive the result: use a full-body, unoccluded reference",
+    "SCAIL-2: a full-bleed portrait reference against a wide shot renders the character oversized (measured 1.71x); reframe first",
+    "Mask-inpainting (VACE) is the wrong workflow for full character replacement: it repaints inside the source silhouette; reserve it for localised edits (garment, prop, removal)"
+   ],
+   "economicalTest": "480p, shortest segment around the action peak, one character first"
+  },
+  {
+   "id": "keyframe_guided_replacement",
+   "name": "Keyframe-guided replacement (mask as production intermediate)",
+   "userCues": [
+    "exactement comme cette image",
+    "comme sur la photo",
+    "fidèle au design",
+    "le meme personnage que"
+   ],
+   "task": "Edit the replacement into ONE frame with an image model under full control, then propagate that appearance through the shot with a video backend.",
+   "inputs": [
+    "source frame",
+    "SAM mask on that frame",
+    "image edit",
+    "video backend (first-frame, reference or element)"
+   ],
+   "guidance": [
+    "edited keyframe (strongest appearance guide)",
+    "SAM mask (image inpainting)",
+    "reference/element binding downstream"
+   ],
+   "workflow": [
+    "seek to a representative frame",
+    "track_object(subject)",
+    "image-inpaint the keyframe (planned tool; today: external/Muse Image edit)",
+    "feed keyframe to character_replace_motion or instruction_video_edit as reference",
+    "recomposite through SAM mask"
+   ],
+   "backends": [
+    {
+     "provider": "fal/meta",
+     "model": "image inpainting (FLUX Fill class / Muse Image edits)",
+     "status": "planned",
+     "price": "per image, cents",
+     "ranking": "Image inpainting is mask-native and far stronger per dollar than video frames"
+    }
+   ],
+   "risks": [
+    "Appearance drift over long shots; re-anchor with a second keyframe beyond ~5 s",
+    "Not yet wired as a single tool in this repo"
+   ],
+   "economicalTest": "One keyframe first; judge the still before any video spend"
+  },
+  {
+   "id": "motion_transfer",
+   "name": "Motion transfer onto a character",
+   "userCues": [
+    "fais danser",
+    "fais lui faire",
+    "meme danse",
+    "meme mouvement",
+    "anime ce personnage avec"
+   ],
+   "task": "A character image performs the movements of a separate reference video.",
+   "inputs": [
+    "character image",
+    "motion reference video"
+   ],
+   "guidance": [
+    "motion reference video",
+    "character_orientation",
+    "facial element (optional)"
+   ],
+   "workflow": [
+    "obtain character image",
+    "provider motion-control call (not yet wired)",
+    "present as new clip"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "fal-ai/kling-video/v3/pro/motion-control",
+     "status": "available",
+     "price": "$0.168/s",
+     "ranking": "Reference motion transfer, up to 30 s in video orientation"
+    }
+   ],
+   "risks": [
+    "Driver video should show a full or upper body, unobstructed",
+    "Generated scene, not the source footage: do not promise background preservation"
+   ],
+   "economicalTest": "Short driver excerpt, image orientation first"
+  },
+  {
+   "id": "first_last_frame",
+   "name": "First/last-frame transition",
+   "userCues": [
+    "transition vers",
+    "commence par",
+    "finit sur",
+    "de cette image a",
+    "morphing entre"
+   ],
+   "task": "Generate the in-between between an imposed start image and an imposed end image.",
+   "inputs": [
+    "start image",
+    "last image",
+    "prompt"
+   ],
+   "guidance": [
+    "first frame",
+    "last frame",
+    "up to 3 reference images (Veo)"
+   ],
+   "workflow": [
+    "prepare both frames (frames of the edit or generated stills)",
+    "provider FLF call (not yet wired)",
+    "cut the result between the two shots"
+   ],
+   "backends": [
+    {
+     "provider": "google",
+     "model": "Veo 3.1 (Gemini API)",
+     "status": "planned",
+     "price": "per-second Google pricing",
+     "ranking": "Chosen for control surface, not Elo (text-to-video ~#21)"
+    },
+    {
+     "provider": "fal",
+     "model": "Seedance/Kling FLF variants",
+     "status": "available",
+     "price": "per-second",
+     "ranking": "Hosted variants behind the same fal key"
+    }
+   ],
+   "risks": [
+    "In-between motion is invented: keep transitions short",
+    "Frames must share aspect and scale"
+   ],
+   "economicalTest": "Shortest duration tier, one transition only"
+  },
+  {
+   "id": "reference_identity_generation",
+   "name": "Reference-bound generation (identity/elements)",
+   "userCues": [
+    "le meme personnage",
+    "garde son visage",
+    "ce produit",
+    "avec ce logo",
+    "le meme chien"
+   ],
+   "task": "Generate new footage where a person/product must persist across shots, bound by reference media.",
+   "inputs": [
+    "prompt",
+    "reference images/videos (Seedance) or elements (Kling)"
+   ],
+   "guidance": [
+    "reference images/videos addressed as @Image/@Element in the prompt",
+    "frontal + multi-angle element set"
+   ],
+   "workflow": [
+    "collect or generate the reference set",
+    "generate_shot with references (reference support planned in the tool)",
+    "reuse the same references for every shot of the sequence"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "bytedance/seedance-2.0/reference-to-video",
+     "status": "available",
+     "price": "per-second",
+     "ranking": "Up to 9 images + 3 videos + 3 audio references"
+    },
+    {
+     "provider": "fal",
+     "model": "Kling 3.0 elements (o3/v3 endpoints)",
+     "status": "available",
+     "price": "per-second",
+     "ranking": "Frontal + reference angles element binding"
+    }
+   ],
+   "risks": [
+    "Identity holds best with clean, multi-angle references",
+    "Mixing providers mid-sequence breaks identity: one sequence, one backend"
+   ],
+   "economicalTest": "One hero shot first; validate identity before generating the sequence"
+  },
+  {
+   "id": "outpaint_reframe",
+   "name": "Outpainting / reframing",
+   "userCues": [
+    "en vertical",
+    "9:16",
+    "elargis le cadre",
+    "recadre",
+    "plus large"
+   ],
+   "task": "Extend the frame beyond its borders (format change, camera widening) with generated surroundings.",
+   "inputs": [
+    "source segment",
+    "target aspect"
+   ],
+   "guidance": [
+    "task endpoint (outpainting/reframe)",
+    "prompt for surroundings"
+   ],
+   "workflow": [
+    "provider outpaint call (not yet wired)",
+    "grade-match borders with a shader pass if needed"
+   ],
+   "backends": [
+    {
+     "provider": "fal",
+     "model": "fal-ai/wan-vace-14b/outpainting",
+     "status": "available",
+     "price": "$0.04-0.08/s by resolution",
+     "ranking": "Same VACE family as the implemented inpainting"
+    }
+   ],
+   "risks": [
+    "Invented surroundings must stay generic (sky, wall, floor)",
+    "Fast camera moves expose border invention"
+   ],
+   "economicalTest": "Short segment, 480p, check borders on the fastest frame"
+  },
+  {
+   "id": "deterministic_shader_effect",
+   "name": "Deterministic shader effect (no generation)",
+   "userCues": [
+    "etalonne",
+    "floute le fond",
+    "ajoute des etincelles",
+    "zoom",
+    "ralenti visuel",
+    "effet",
+    "filtre",
+    "titre"
+   ],
+   "task": "Anything expressible as pixels math over the real footage: grade, blur, particles, 3D overlay, titles, camera moves. Instant, free, frame-exact.",
+   "inputs": [
+    "shader code via apply_shader_effect",
+    "optional SAM mask",
+    "optional virtual camera"
+   ],
+   "guidance": [
+    "ctx.params x16",
+    "SAM mask",
+    "virtual camera",
+    "history feedback"
+   ],
+   "workflow": [
+    "get_shader_interface if not read this session",
+    "validate_shader while iterating",
+    "apply_shader_effect",
+    "seek into range and pause"
+   ],
+   "backends": [
+    {
+     "provider": "local",
+     "model": "WGSL host (this repo)",
+     "status": "implemented",
+     "price": "$0",
+     "ranking": "Real-time; the finishing layer for every generative result"
+    }
+   ],
+   "risks": [
+    "Cannot invent new photographed content",
+    "If the request needs new content, route to a generative technique instead of faking it"
+   ],
+   "economicalTest": "Always try this first when the request is a treatment, not new content"
+  }
+ ]
+}

@@ -4,5 +4,10 @@
 node_modules/
 .venv/
 dist/
+tools/bench/assets/
+tools/bench/runs/
+server/agent-workspace/*
+!server/agent-workspace/.gitkeep
+server/gen-output/
 *.log
 .DS_Store

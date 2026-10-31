@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "notes": "Tested ComfyUI workflow repertoire. Each entry is a proven graph with fixed internal settings; the supervisor only fills the declared parameters. Never invent sampler settings: if a job does not fit an entry, say so instead of improvising a graph.",
+  "runtime": {
+    "server": "Local ComfyUI, COMFY_URL env (default http://127.0.0.1:8188), install in C:\\tmp\\ComfyUI (.venv inside)",
+    "hardware": "RTX 4070 Ti 12 GB verified; start with --disable-pinned-memory --reserve-vram 1.5",
+    "diskWarning": "Keep several GB free on C: - a full disk silently breaks pagefile growth and jobs fail with CPU allocator errors"
+  },
+  "workflows": [
+    {
+      "id": "scail2-character-replacement",
+      "file": "scail2-character-replacement.api.json",
+      "purpose": "Replace a person in real footage with a reference character, following the source performance frame by frame (position, trajectory, timing). Scene/background preserved.",
+      "pickWhen": [
+        "user asks to turn a person into another character and the source performance must be followed",
+        "Recast (hosted) is unavailable, too loose, or a local/no-cost render is preferred"
+      ],
+      "doNotPickWhen": [
+        "localised edit only (garment, prop, removal): use the VACE backend instead",
+        "no reference character image exists yet: build one first (image generation or edited keyframe)"
+      ],
+      "parameters": {
+        "DRIVING_FILE": "driving clip in ComfyUI/input: 65 frames, 16 fps, generation size (multiple of 32)",
+        "REF_FILE": "reference character image in ComfyUI/input, REFRAMED so the character occupies the same frame-height fraction as the source subject (measured from the SAM mask)",
+        "DETECT_SUBJECT": "SAM3 detection noun for the source subject, e.g. woman",
+        "DETECT_REF": "SAM3 detection noun for the reference, e.g. toy robot",
+        "POSITIVE": "description of the FINISHED result (character + action + scene), never an instruction",
+        "WIDTH/HEIGHT": "generation size, multiple of 32, source aspect",
+        "LENGTH": "65 (single chunk; longer clips need the Extend chunk, not yet templated)",
+        "SEED": "fixed 42 for reproducibility unless exploring"
+      },
+      "fixedSettings": "SCAIL-2 int8 model, lightx2v LoRA 0.8, SCAIL DPO LoRA 1.0, shift 5, euler/simple, 6 steps, CFG 1, pose_strength 1, replacement_mode true. Do not tune per request.",
+      "testedResult": "2026-10-30, easy stock clip (woman walking on a hill -> robot reference): identity stable, trajectory followed, background preserved. Known limit: body orientation can drift toward camera vs a strict side-profile source.",
+      "cost": "local GPU only, about 6 min for 65 frames at 960x544 on a 4070 Ti"
+    }
+  ]
+}
