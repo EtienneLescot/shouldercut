@@ -440,7 +440,7 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const start = Number(body.start ?? 0);
     const end = Number(body.end ?? 0);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) throw new Error('start/end must be a valid range');
-    const backend = body.backend === 'wan-animate' || body.backend === 'vace' || body.backend === 'kling-o3' || body.backend === 'recast' || body.backend === 'scail' ? String(body.backend) : undefined;
+    const backend = body.backend === 'wan-animate' || body.backend === 'vace' || body.backend === 'kling-o3' || body.backend === 'recast' || body.backend === 'scail' || body.backend === 'scail-animate' || body.backend === 'vace-local' ? String(body.backend) : undefined;
     const job = genManager.createEditJob(prompt, typeof body.refImageUrl === 'string' ? body.refImageUrl : undefined, backend, {
       subjectLabel: typeof body.subjectLabel === 'string' ? body.subjectLabel : undefined,
       refLabel: typeof body.refLabel === 'string' ? body.refLabel : undefined,

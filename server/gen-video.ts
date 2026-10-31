@@ -221,7 +221,7 @@ function comfyUrl(): string {
   return process.env.COMFY_URL || 'http://127.0.0.1:8188';
 }
 function comfyDir(): string {
-  return process.env.COMFY_DIR || 'C:\\tmp\\ComfyUI';
+  return process.env.COMFY_DIR || 'E:\\ComfyUI';
 }
 
 function probeSize(path: string): Promise<{ width: number; height: number }> {
@@ -255,7 +255,7 @@ function subjectHeightFraction(mask: MaskVideoSource | null): number {
 
 async function runComfyWorkflow(
   workflowId: string,
-  params: Record<string, string | number>,
+  params: Record<string, string | number | boolean>,
   job: GenJob,
 ): Promise<string> {
   const base = comfyUrl();
@@ -269,8 +269,9 @@ async function runComfyWorkflow(
   const templatePath = resolve(process.cwd(), 'server', 'comfy-workflows', workflowId + '.api.json');
   let text = readFileSync(templatePath, 'utf8');
   for (const [key, value] of Object.entries(params)) {
-    if (typeof value === 'number') {
+    if (typeof value === 'number' || typeof value === 'boolean') {
       text = text.split('"{{' + key + '}}"').join(String(value));
+      text = text.split('{{' + key + '}}').join(String(value));
     } else {
       text = text.split('{{' + key + '}}').join(value.replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
     }
@@ -308,7 +309,7 @@ async function runComfyWorkflow(
       for (const item of candidates) {
         const view = await fetch(base + '/view?filename=' + encodeURIComponent(item.filename) + '&subfolder=' + encodeURIComponent(item.subfolder) + '&type=output');
         if (!view.ok) continue;
-        const name = job.id + '-scail-result.mp4';
+        const name = job.id + '-comfy-result.mp4';
         writeFileSync(genFilePath(name), Buffer.from(await view.arrayBuffer()));
         return name;
       }
@@ -436,10 +437,76 @@ export class GenJobManager {
         ]);
         job.files.maskVideo = maskName;
       }
-      if (job.backend === 'scail') {
+      if (job.backend === 'vace-local') {
+        // Local ComfyUI repertoire workflow: vace-inpainting-local.
+        // Official-template settings (shift 5, CFG 6, 20 steps, uni_pc,
+        // GrowMask inside the graph); the server prepares the grey-127
+        // control video and the mask video from the SAM track.
+        if (!maskName) throw new Error('vace-local backend requires a SAM mask (track the subject first)');
+        job.state = 'running';
+        // Draft tier on a 12 GB GPU: undistilled 1.3B at full size/steps
+        // measured ~160 s/step (impractical). 832x480, 65 frames, 8 steps.
+        const width = 832;
+        const height = 480;
+        const length = 65;
+        const controlName2 = job.id + '-vace-control.mp4';
+        await runFfmpeg([
+          '-i', genFilePath(segmentName),
+          '-f', 'lavfi', '-i', 'color=0x7f7f7f:s=' + width + 'x' + height + ':r=16',
+          '-i', genFilePath(maskName),
+          '-filter_complex',
+          '[0:v]scale=' + width + ':' + height + ',fps=16,setpts=PTS-STARTPTS[s];' +
+          '[1:v]fps=16,setpts=PTS-STARTPTS[g];' +
+          '[2:v]scale=' + width + ':' + height + ',fps=16,format=gray,setpts=PTS-STARTPTS[m];' +
+          '[s][g][m]maskedmerge,format=yuv420p[out]',
+          '-map', '[out]', '-frames:v', String(length),
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', genFilePath(controlName2),
+        ]);
+        const maskScaledName = job.id + '-vace-mask.mp4';
+        await runFfmpeg([
+          '-i', genFilePath(maskName),
+          '-vf', 'scale=' + width + ':' + height + ',fps=16,format=yuv420p', '-frames:v', String(length),
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', genFilePath(maskScaledName),
+        ]);
+        let refLocalName: string;
+        if (job.refImageUrl) {
+          const refResponse = await fetch(job.refImageUrl);
+          if (!refResponse.ok) throw new Error('Could not download reference image: HTTP ' + refResponse.status);
+          refLocalName = job.id + '-vace-ref.png';
+          writeFileSync(genFilePath(refLocalName), Buffer.from(await refResponse.arrayBuffer()));
+        } else {
+          // No reference design: anchor on the segment's own first frame.
+          refLocalName = job.id + '-vace-ref.png';
+          await runFfmpeg(['-i', genFilePath(segmentName), '-frames:v', '1', genFilePath(refLocalName)]);
+        }
+        const inputDir = join(comfyDir(), 'input');
+        if (!existsSync(inputDir)) throw new Error('ComfyUI input dir not found: ' + inputDir + ' (set COMFY_DIR)');
+        copyFileSync(genFilePath(controlName2), join(inputDir, 'shouldercut-vace-control.mp4'));
+        copyFileSync(genFilePath(maskScaledName), join(inputDir, 'shouldercut-vace-mask.mp4'));
+        copyFileSync(genFilePath(refLocalName), join(inputDir, 'shouldercut-vace-ref.png'));
+        job.files.result = await runComfyWorkflow('vace-inpainting-local', {
+          CONTROL_FILE: 'shouldercut-vace-control.mp4',
+          MASK_FILE: 'shouldercut-vace-mask.mp4',
+          REF_FILE: 'shouldercut-vace-ref.png',
+          POSITIVE: job.prompt,
+          NEGATIVE: 'human woman, human child, girl, boy, human skin, hair, dress, clothes, realistic human, person, worst quality, low quality, blurred details, deformed, malformed limbs, extra fingers',
+          MASK_EXPAND: 12,
+          WIDTH: width,
+          HEIGHT: height,
+          LENGTH: length,
+          SEED: 42,
+          PREFIX: job.id,
+        }, job);
+        job.state = 'done';
+        return;
+      }
+      if (job.backend === 'scail' || job.backend === 'scail-animate') {
         // Local ComfyUI repertoire workflow: scail2-character-replacement.
         // Fixed tested settings live in the template; here we only prepare
         // its declared parameters (driving clip, reframed reference, labels).
+        // scail-animate is the same graph in Animation Mode: the reference
+        // character performs the driving motion on the reference background.
+        const animateMode = job.backend === 'scail-animate';
         if (!job.refImageUrl) throw new Error('scail backend requires refImageUrl (the replacement character image)');
         job.state = 'running';
         const width = 960;
@@ -459,16 +526,25 @@ export class GenJobManager {
         // the character occupies the same frame-height fraction as the SAM
         // subject (reference subjects are assumed to fill ~80% of their own
         // frame, as in our tested reference).
-        const fraction = subjectHeightFraction(mask);
-        const refSize = await probeSize(genFilePath(refRawName));
-        const scaledHeight = Math.max(64, Math.round(((fraction * height) / 0.8) / 2) * 2);
-        const scaledWidth = Math.max(64, Math.round((refSize.width * (scaledHeight / refSize.height)) / 2) * 2);
         const refFramedName = job.id + '-scail-ref.png';
-        await runFfmpeg([
-          '-i', genFilePath(refRawName),
-          '-vf', 'scale=' + scaledWidth + ':' + scaledHeight + ',pad=' + width + ':' + height + ':(' + width + '-iw)/2:(' + height + '-ih)/2:color=0xd8d5cc,format=rgb24',
-          '-frames:v', '1', genFilePath(refFramedName),
-        ]);
+        if (animateMode) {
+          // Animation Mode: the reference image IS the scene; fill the frame.
+          await runFfmpeg([
+            '-i', genFilePath(refRawName),
+            '-vf', 'scale=' + width + ':' + height + ':force_original_aspect_ratio=increase,crop=' + width + ':' + height + ',format=rgb24',
+            '-frames:v', '1', genFilePath(refFramedName),
+          ]);
+        } else {
+          const fraction = subjectHeightFraction(mask);
+          const refSize = await probeSize(genFilePath(refRawName));
+          const scaledHeight = Math.max(64, Math.round(((fraction * height) / 0.8) / 2) * 2);
+          const scaledWidth = Math.max(64, Math.round((refSize.width * (scaledHeight / refSize.height)) / 2) * 2);
+          await runFfmpeg([
+            '-i', genFilePath(refRawName),
+            '-vf', 'scale=' + scaledWidth + ':' + scaledHeight + ',pad=' + width + ':' + height + ':(' + width + '-iw)/2:(' + height + '-ih)/2:color=0xd8d5cc,format=rgb24',
+            '-frames:v', '1', genFilePath(refFramedName),
+          ]);
+        }
         const inputDir = join(comfyDir(), 'input');
         if (!existsSync(inputDir)) throw new Error('ComfyUI input dir not found: ' + inputDir + ' (set COMFY_DIR)');
         // Stable input names: identical content re-runs hit the ComfyUI node
@@ -483,6 +559,7 @@ export class GenJobManager {
           DETECT_SUBJECT: job.subjectLabel || 'person',
           DETECT_REF: job.refLabel || 'character',
           POSITIVE: job.prompt,
+          REPLACEMENT_MODE: !animateMode,
           WIDTH: width,
           HEIGHT: height,
           LENGTH: length,
@@ -592,6 +669,8 @@ export class GenJobManager {
     if (backend === 'kling-o3') job.model = 'fal-ai/kling-video/o3/pro/video-to-video/edit';
     if (backend === 'recast') job.model = 'minimax/h3-max/recast';
     if (backend === 'scail') job.model = 'local-comfyui/scail2-character-replacement';
+    if (backend === 'scail-animate') job.model = 'local-comfyui/scail2-character-replacement (animation mode)';
+    if (backend === 'vace-local') job.model = 'local-comfyui/vace-inpainting-local';
     return job;
   }
 }

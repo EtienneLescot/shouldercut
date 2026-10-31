@@ -2,7 +2,7 @@
   "version": 1,
   "notes": "Tested ComfyUI workflow repertoire. Each entry is a proven graph with fixed internal settings; the supervisor only fills the declared parameters. Never invent sampler settings: if a job does not fit an entry, say so instead of improvising a graph.",
   "runtime": {
-    "server": "Local ComfyUI, COMFY_URL env (default http://127.0.0.1:8188), install in C:\\tmp\\ComfyUI (.venv inside)",
+    "server": "Local ComfyUI, COMFY_URL env (default http://127.0.0.1:8188), install in E:\\ComfyUI (.venv inside; moved off C:\\tmp after the system purged the two largest model files there)",
     "hardware": "RTX 4070 Ti 12 GB verified; start with --disable-pinned-memory --reserve-vram 1.5",
     "diskWarning": "Keep several GB free on C: - a full disk silently breaks pagefile growth and jobs fail with CPU allocator errors"
   },
@@ -32,6 +32,53 @@
       "fixedSettings": "SCAIL-2 int8 model, lightx2v LoRA 0.8, SCAIL DPO LoRA 1.0, shift 5, euler/simple, 6 steps, CFG 1, pose_strength 1, replacement_mode true. Do not tune per request.",
       "testedResult": "2026-10-30, easy stock clip (woman walking on a hill -> robot reference): identity stable, trajectory followed, background preserved. Known limit: body orientation can drift toward camera vs a strict side-profile source.",
       "cost": "local GPU only, about 6 min for 65 frames at 960x544 on a 4070 Ti"
+    },
+    {
+      "id": "scail2-animation",
+      "file": "scail2-character-replacement.api.json",
+      "purpose": "Animation Mode of the same SCAIL-2 graph (REPLACEMENT_MODE=false, backend scail-animate): the reference character performs the driving motion, on the reference image's own background. Use to animate a still character with a performance clip.",
+      "pickWhen": [
+        "user wants a character image to move/act like a driving video, keeping the character's own scene"
+      ],
+      "doNotPickWhen": [
+        "the source footage scene must be preserved: that is Replacement Mode (scail)"
+      ],
+      "parameters": {
+        "DRIVING_FILE": "driving clip in ComfyUI/input: 65 frames, 16 fps, generation size",
+        "REF_FILE": "character image cover-scaled to the generation frame (the server does this)",
+        "DETECT_SUBJECT": "SAM3 detection noun for the driving subject",
+        "DETECT_REF": "SAM3 detection noun for the character",
+        "POSITIVE": "description of the FINISHED result, never an instruction",
+        "WIDTH/HEIGHT/LENGTH/SEED": "same contract as scail2-character-replacement"
+      },
+      "fixedSettings": "Identical to scail2-character-replacement; only REPLACEMENT_MODE differs.",
+      "testedResult": "Wiring tested 2026-10-30 (same harness); judge quality per render.",
+      "cost": "local GPU only, about 6 min for 65 frames at 960x544 on a 4070 Ti"
+    },
+    {
+      "id": "vace-inpainting-local",
+      "file": "vace-inpainting-local.api.json",
+      "purpose": "Localised masked video edit: repaint only inside the SAM mask (garment change, prop swap, object/person removal), following the official ComfyUI VACE template pattern at 1.3B for a 12 GB GPU.",
+      "pickWhen": [
+        "the edit is localised and the rest of the frame must stay untouched",
+        "a local/no-cost masked edit is preferred over the hosted VACE endpoint"
+      ],
+      "doNotPickWhen": [
+        "full character replacement: use scail2-character-replacement or Recast",
+        "the mask is unreliable: fix tracking first"
+      ],
+      "parameters": {
+        "CONTROL_FILE": "source segment with the masked area filled grey-127 (server builds it from the SAM mask)",
+        "MASK_FILE": "mask video at generation size (server builds it)",
+        "REF_FILE": "optional design reference; the segment first frame when none is given",
+        "POSITIVE": "description of the FINISHED result inside the mask",
+        "NEGATIVE": "server default (subject negatives + quality guardrails)",
+        "MASK_EXPAND": "12 px beyond the server-dilated mask (official template grows 20 at 720p)",
+        "WIDTH/HEIGHT": "832x480, LENGTH 65 at 16 fps (draft tier)"
+      },
+      "fixedSettings": "Wan2.1 VACE 1.3B fp16, WanVaceToVideo strength 1, shift 5, KSampler 8 steps CFG 6 uni_pc/simple denoise 1, seed 42, draft size 832x480 / 65 frames. Do not tune per request. (Official undistilled recipe is 20 steps; measured ~160 s/step on a 4070 Ti at 960x544/81f, hence the draft tier.)",
+      "testedResult": "Wiring tested 2026-10-30 on the easy stock clip (draft tier); quality below the 14B hosted endpoint is expected at 1.3B.",
+      "cost": "local GPU only, roughly 10 min for 65 frames at 832x480 on a 4070 Ti"
     }
   ]
 }

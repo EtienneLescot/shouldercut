@@ -1,0 +1,21 @@
+{
+  "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "wan2.1_vace_1.3B_fp16.safetensors", "weight_dtype": "default"}},
+  "2": {"class_type": "ModelSamplingSD3", "inputs": {"model": ["1", 0], "shift": 5.0}},
+  "3": {"class_type": "CLIPLoader", "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan"}},
+  "4": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 0], "text": "{{POSITIVE}}"}},
+  "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["3", 0], "text": "{{NEGATIVE}}"}},
+  "6": {"class_type": "VAELoader", "inputs": {"vae_name": "Wan2_1_VAE_bf16.safetensors"}},
+  "7": {"class_type": "LoadVideo", "inputs": {"file": "{{CONTROL_FILE}}"}},
+  "8": {"class_type": "GetVideoComponents", "inputs": {"video": ["7", 0]}},
+  "9": {"class_type": "LoadVideo", "inputs": {"file": "{{MASK_FILE}}"}},
+  "10": {"class_type": "GetVideoComponents", "inputs": {"video": ["9", 0]}},
+  "11": {"class_type": "ImageToMask", "inputs": {"image": ["10", 0], "channel": "red"}},
+  "12": {"class_type": "GrowMask", "inputs": {"mask": ["11", 0], "expand": "{{MASK_EXPAND}}", "tapered_corners": true}},
+  "13": {"class_type": "LoadImage", "inputs": {"image": "{{REF_FILE}}"}},
+  "14": {"class_type": "WanVaceToVideo", "inputs": {"positive": ["4", 0], "negative": ["5", 0], "vae": ["6", 0], "width": "{{WIDTH}}", "height": "{{HEIGHT}}", "length": "{{LENGTH}}", "batch_size": 1, "strength": 1.0, "control_video": ["8", 0], "control_masks": ["12", 0], "reference_image": ["13", 0]}},
+  "15": {"class_type": "KSampler", "inputs": {"model": ["2", 0], "seed": "{{SEED}}", "steps": 8, "cfg": 6.0, "sampler_name": "uni_pc", "scheduler": "simple", "positive": ["14", 0], "negative": ["14", 1], "latent_image": ["14", 2], "denoise": 1.0}},
+  "16": {"class_type": "TrimVideoLatent", "inputs": {"samples": ["15", 0], "trim_amount": ["14", 3]}},
+  "17": {"class_type": "VAEDecode", "inputs": {"samples": ["16", 0], "vae": ["6", 0]}},
+  "18": {"class_type": "CreateVideo", "inputs": {"images": ["17", 0], "fps": 16.0}},
+  "19": {"class_type": "SaveVideo", "inputs": {"video": ["18", 0], "filename_prefix": "video/{{PREFIX}}", "format": "auto"}}
+}

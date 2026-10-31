@@ -155,6 +155,13 @@
    ],
    "backends": [
     {
+     "provider": "local ComfyUI via ShoulderCut repertoire (server/comfy-workflows/)",
+     "model": "vace-inpainting-local (edit_segment backend vace-local)",
+     "status": "implemented-tested-draft",
+     "price": "local GPU only",
+     "ranking": "TESTED 2026-10-30 draft tier (1.3B, 8 steps, 832x480): wiring proven, silhouette/mask respected, material fidelity weak (saturated). Prefer hosted VACE 14B for quality; use local for free drafts."
+    },
+    {
      "provider": "fal",
      "model": "fal-ai/wan-vace-14b/inpainting",
      "status": "implemented",
@@ -309,6 +316,13 @@
     "present as new clip"
    ],
    "backends": [
+    {
+     "provider": "local ComfyUI via ShoulderCut repertoire (server/comfy-workflows/)",
+     "model": "scail2-animation (edit_segment backend scail-animate)",
+     "status": "implemented-tested",
+     "price": "local GPU only, ~10 min",
+     "ranking": "TESTED 2026-10-30: reference character performs the driving motion on its own background, identity stable."
+    },
     {
      "provider": "fal",
      "model": "fal-ai/kling-video/v3/pro/motion-control",
