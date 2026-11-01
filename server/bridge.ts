@@ -7,6 +7,7 @@ import type { Plugin } from 'vite';
 import type { ShaderEffectDefinition } from '../src/render/protocol.js';
 import { trackVideo, type SamTrackResult } from './sam.js';
 import { GenJobManager, genFilePath, workingPreviewCode, type GenJob } from './gen-video.js';
+import { EditGraph, projectSrt, readExportFile } from './edit-graph.js';
 import { readFileSync } from 'node:fs';
 
 interface PendingCompile {
@@ -32,6 +33,8 @@ interface PendingTrack {
 }
 const pendingTracks = new Map<string, PendingTrack>();
 const genManager = new GenJobManager();
+const editGraph = new EditGraph();
+const attachedGenJobs = new Set<string>();
 interface PendingGenUpload { job: GenJob; start: number; end: number }
 const pendingGenUploads = new Map<string, PendingGenUpload>();
 let browserState: unknown = null;
@@ -217,7 +220,8 @@ function fxPrompt(message: string, history: ChatMessage[]): string {
   const historyText = history.slice(-8).map((m) => m.role + ': ' + m.text).join('\n');
   return [
     'You are the ShoulderCut VFX agent: a professional special-effects and video-editing shader artist. You work only by writing free-form WGSL through the shouldercut-fx MCP tools. There is no effects catalog: every effect is code you invent.',
-    'Use ONLY these MCP tools: get_shader_interface, get_editing_craft, list_video_techniques, recommend_video_workflow, get_video_state, list_shader_effects, validate_shader, apply_shader_effect, remove_shader_effect, clear_shader_effects, seek_video, set_playing, track_object, generate_shot, edit_segment, get_generation_job, show_working_preview, clear_working_preview.',
+    'Use ONLY these MCP tools: get_shader_interface, get_editing_craft, list_video_techniques, recommend_video_workflow, list_comfy_workflows, get_video_state, list_shader_effects, validate_shader, apply_shader_effect, remove_shader_effect, clear_shader_effects, seek_video, set_playing, track_object, generate_shot, edit_segment, get_generation_job, show_working_preview, clear_working_preview, get_project, trim_clip, split_clip, move_clip, delete_clip, remove_silences, set_captions, undo, redo, export_video.',
+    'Editing (SPEC section 7): the edit graph is the source of truth for timeline structure. Call get_project first for clip ids, then trim_clip/split_clip/move_clip/delete_clip/remove_silences/set_captions; every op is validated and undoable (undo/redo). "undo that" = undo. "same on the other clip" = re-apply the same op/effect to the other clip id from get_project. Captions: set_captions with cues in source time; when transcribing speech, split long turns into cues proportionally to text length. export_video renders the graph (trims, order, burned captions) to MP4 and returns the download path; name it in your confirmation.',
     'Generative video (docs/generative-video-spec.md): before ANY generative job, call recommend_video_workflow once with the user request verbatim and follow the returned workflow: it picks the technique (character replacement, masked inpainting, instruction edit, motion transfer, generated insert...) and the backend in order, with economical test settings. Typical subject transformation: track_object, show_working_preview, then the planned generation call. Generation is asynchronous and takes minutes: submit, tell the user the job id and that it is running, and do not busy-poll in this turn unless the user explicitly waits. get_generation_job reports segment/control/result files when done. A stub provider result is a placeholder, never describe it as AI generation. Backends marked available/planned in the plan are not wired yet: say so and use the implemented fallback or ask. Clear the working preview when a draft lands or a job fails.',
     'Efficiency is a hard product constraint: the editor must stay fast. get_editing_craft(topic) loads one small distilled craft topic (colour, camera, beat, captions): call it only when the request touches that craft, at most one topic unless the request spans two, never during WGSL error iteration, and never reload a topic already read. For plain effects, load no craft at all. After applying, at most one verify-and-fix pass; prefer measured acceptance (no new clipping, natural faces) over repeated re-rendering.',
     'Do not use filesystem, shell, web, memory, workflow, subagent, browser, or user-input tools. Do not edit repository files.',
@@ -313,6 +317,59 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   }
   if (req.method === 'GET' && pathname === '/api/state') {
     sendJson(res, 200, statePayload());
+    return;
+  }
+  // --- Edit graph (SPEC §6-7): project document, operations, export ---
+  if (req.method === 'GET' && pathname === '/api/project') {
+    sendJson(res, 200, { ok: true, project: editGraph.get(), totalDuration: editGraph.totalDuration() });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/clips') {
+    const bytes = await readRawBody(req, 2 * 1024 * 1024 * 1024);
+    const name = String(req.headers['x-file-name'] || 'clip');
+    const clip = await editGraph.addClip(bytes, name);
+    broadcast('project', editGraph.get());
+    sendJson(res, 200, { ok: true, clip, project: editGraph.get() });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/edit/op') {
+    const body = await readJson(req);
+    const op = String(body.op || '');
+    const id = String(body.clipId || '');
+    let label = op;
+    if (op === 'trim') editGraph.trimClip(id, Number(body.start), Number(body.end));
+    else if (op === 'split') editGraph.splitClip(id, Number(body.at));
+    else if (op === 'move') editGraph.moveClip(id, Number(body.toIndex));
+    else if (op === 'delete') editGraph.deleteClip(id);
+    else if (op === 'captions') editGraph.setCaptions(id, Array.isArray(body.cues) ? body.cues as never[] : [], body.enabled !== false);
+    else if (op === 'remove_silences') await editGraph.removeSilences(id, Number(body.thresholdDb ?? -35), Number(body.minSilence ?? 0.45));
+    else if (op === 'undo') label = 'undo: ' + editGraph.undo().label;
+    else if (op === 'redo') label = 'redo: ' + editGraph.redo().label;
+    else throw new Error('Unknown edit op: ' + op);
+    broadcast('project', editGraph.get());
+    sendJson(res, 200, { ok: true, op: label, project: editGraph.get(), totalDuration: editGraph.totalDuration() });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/export') {
+    const body = await readJson(req);
+    const preset = body.preset === 'vertical-1080x1920' || body.preset === 'square' ? body.preset : '1080p';
+    const result = await editGraph.exportMp4(preset);
+    sendJson(res, 200, { ok: true, ...result, url: '/api/export/file?name=' + encodeURIComponent(result.file) });
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/export/file') {
+    const url = new URL(req.url || '', 'http://127.0.0.1');
+    const name = url.searchParams.get('name') || '';
+    const data = readExportFile(name);
+    if (!data) { sendJson(res, 404, { ok: false, message: 'File not found' }); return; }
+    res.writeHead(200, { 'Content-Type': name.endsWith('.srt') ? 'text/plain; charset=utf-8' : 'video/mp4', 'Content-Length': data.length });
+    res.end(data);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/project/captions.srt') {
+    const srt = projectSrt(editGraph.get());
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(srt);
     return;
   }
   if (req.method === 'GET' && pathname === '/api/events') {
@@ -477,6 +534,16 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     const id = decodeURIComponent(pathname.slice('/api/gen/jobs/'.length));
     const job = genManager.get(id);
     if (!job) { sendJson(res, 404, { ok: false, message: 'Unknown generation job ' + id }); return; }
+    // Finished generations join the edit graph as clips (once), so the
+    // result is part of the project: trimmable, movable, exportable.
+    if (job.state === 'done' && job.files.result && !attachedGenJobs.has(job.id)) {
+      attachedGenJobs.add(job.id);
+      try {
+        const name = 'generated: ' + job.prompt.slice(0, 48);
+        await editGraph.addClip(readFileSync(genFilePath(job.files.result)), name);
+        broadcast('project', editGraph.get());
+      } catch { /* attachment is best-effort; the job file remains available */ }
+    }
     sendJson(res, 200, { ok: true, job });
     return;
   }

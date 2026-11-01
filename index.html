@@ -23,6 +23,26 @@
       <canvas id="preview" width="1280" height="720"></canvas>
       <div id="emptyState" class="empty">Drag and drop an MP4 or WebM file here.</div>
       <div id="dropHint" class="drop-hint hidden">Drop video to load it</div>
+      <div id="captionOverlay" class="caption-overlay hidden"></div>
+    </section>
+
+    <section class="project-panel" aria-label="Edit graph project">
+      <div class="agent-head">
+        <h2>Project</h2>
+        <span id="projectStatus">No clips yet</span>
+      </div>
+      <div id="clipList" class="clip-list">Open a video: it joins the edit graph.</div>
+      <div class="row project-actions">
+        <button id="undoBtn" type="button">Undo</button>
+        <button id="redoBtn" type="button">Redo</button>
+        <select id="exportPreset" aria-label="Export preset">
+          <option value="1080p">1080p</option>
+          <option value="vertical-1080x1920">Vertical 1080x1920</option>
+          <option value="square">Square 1080x1080</option>
+        </select>
+        <button id="exportBtn" type="button">Export MP4</button>
+        <span id="exportStatus"></span>
+      </div>
     </section>
 
     <section class="controls" aria-label="Playback controls">

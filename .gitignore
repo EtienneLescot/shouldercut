@@ -9,5 +9,6 @@ tools/bench/runs/
 server/agent-workspace/*
 !server/agent-workspace/.gitkeep
 server/gen-output/
+server/clip-store/
 *.log
 .DS_Store

@@ -28,16 +28,134 @@ const trackForm = document.querySelector<HTMLFormElement>('#trackForm');
 const trackPrompt = document.querySelector<HTMLInputElement>('#trackPrompt');
 const trackBtn = document.querySelector<HTMLButtonElement>('#trackBtn');
 const trackStatus = document.querySelector<HTMLElement>('#trackStatus');
+const captionOverlay = document.querySelector<HTMLElement>('#captionOverlay');
+const clipList = document.querySelector<HTMLElement>('#clipList');
+const projectStatus = document.querySelector<HTMLElement>('#projectStatus');
+const undoBtn = document.querySelector<HTMLButtonElement>('#undoBtn');
+const redoBtn = document.querySelector<HTMLButtonElement>('#redoBtn');
+const exportPreset = document.querySelector<HTMLSelectElement>('#exportPreset');
+const exportBtn = document.querySelector<HTMLButtonElement>('#exportBtn');
+const exportStatus = document.querySelector<HTMLElement>('#exportStatus');
 
 if (!canvas || !fileInput || !playPauseBtn || !stepBackBtn || !stepForwardBtn || !seekBtn
   || !seekSeconds || !timeline || !statusText || !frameText || !mediaText || !decoderText
   || !errorText || !emptyState || !stage || !dropHint || !agentStatus || !chatLog || !chatForm
   || !chatInput || !chatSendBtn || !clearEffectsBtn || !effectsList || !trackForm || !trackPrompt
-  || !trackBtn || !trackStatus) {
+  || !trackBtn || !trackStatus || !captionOverlay || !clipList || !projectStatus || !undoBtn
+  || !redoBtn || !exportPreset || !exportBtn || !exportStatus) {
   throw new Error('Missing application controls');
 }
 
 let currentFile: File | null = null;
+
+// --- Edit graph project (SPEC §6): server is the source of truth ---
+interface CaptionCuePayload { start: number; end: number; text: string }
+interface ProjectClipPayload {
+  id: string; name: string; hash: string; duration: number;
+  in: number; out: number; captions: CaptionCuePayload[]; captionsEnabled: boolean;
+}
+interface ProjectPayload { version: number; clips: ProjectClipPayload[] }
+let project: ProjectPayload | null = null;
+let activeClipId: string | null = null;
+let advancing = false;
+const filesByHash = new Map<string, File>();
+const registeredFiles = new Set<string>();
+
+async function registerClip(file: File): Promise<void> {
+  const key = file.name + ':' + file.size + ':' + file.lastModified;
+  if (registeredFiles.has(key)) return;
+  registeredFiles.add(key);
+  try {
+    const response = await fetch('/api/clips', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'video/mp4', 'x-file-name': file.name },
+      body: file,
+    });
+    const payload = await response.json() as { ok?: boolean; clip?: ProjectClipPayload; project?: ProjectPayload };
+    if (payload.clip && payload.project) {
+      filesByHash.set(payload.clip.hash, file);
+      activeClipId = payload.clip.id;
+      renderProject(payload.project);
+    }
+  } catch { /* project registration is best-effort for preview */ }
+}
+
+function activeClip(): ProjectClipPayload | null {
+  return project?.clips.find((c) => c.id === activeClipId) ?? null;
+}
+
+function renderProject(next: ProjectPayload): void {
+  project = next;
+  const total = next.clips.reduce((sum, c) => sum + (c.out - c.in), 0);
+  projectStatus!.textContent = next.clips.length
+    ? next.clips.length + ' clip(s) - ' + total.toFixed(2) + ' s total'
+    : 'No clips yet';
+  document.body.dataset.projectClips = String(next.clips.length);
+  clipList!.replaceChildren();
+  if (!next.clips.length) {
+    clipList!.textContent = 'Open a video: it joins the edit graph.';
+    return;
+  }
+  for (const clip of next.clips) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'clip-item' + (clip.id === activeClipId ? ' active' : '');
+    const cues = clip.captionsEnabled && clip.captions.length ? ' - ' + clip.captions.length + ' captions' : '';
+    button.textContent = clip.name + ' [' + clip.in.toFixed(2) + 's-' + clip.out.toFixed(2) + 's]' + cues;
+    button.addEventListener('click', () => previewClip(clip.id, false));
+    clipList!.append(button);
+  }
+}
+
+function previewClip(clipId: string, autoplay: boolean): void {
+  const clip = project?.clips.find((c) => c.id === clipId);
+  if (!clip) return;
+  const file = filesByHash.get(clip.hash);
+  activeClipId = clip.id;
+  if (project) renderProject(project);
+  if (!file) return;
+  if (currentFile !== file) loadFile(file);
+  // Wait for the worker to be ready before seeking into the segment.
+  setTimeout(() => {
+    send({ type: 'seek', time: clip.in });
+    if (autoplay) send({ type: 'play' });
+  }, currentFile === file ? 60 : 900);
+}
+
+function updateCaptionOverlay(mediaTime: number): void {
+  const clip = activeClip();
+  const cue = clip?.captionsEnabled
+    ? clip.captions.find((c) => mediaTime >= c.start && mediaTime <= c.end)
+    : undefined;
+  captionOverlay!.textContent = cue?.text ?? '';
+  captionOverlay!.classList.toggle('hidden', !cue);
+}
+
+function advanceIfNeeded(state: PlayerState): void {
+  const clip = activeClip();
+  if (!clip || !project) return;
+  const pastOut = state.mediaTime >= clip.out - 0.02;
+  if (!pastOut && state.phase !== 'ended') return;
+  if (state.phase !== 'playing' && state.phase !== 'ended') return;
+  if (advancing) return;
+  const index = project.clips.findIndex((c) => c.id === clip.id);
+  const next = project.clips[index + 1];
+  advancing = true;
+  setTimeout(() => { advancing = false; }, 1200);
+  if (next) previewClip(next.id, true);
+  else if (state.phase === 'playing') send({ type: 'pause' });
+}
+
+async function editOp(op: string, extra: Record<string, unknown> = {}): Promise<void> {
+  const response = await fetch('/api/edit/op', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op, ...extra }),
+  });
+  const payload = await response.json() as { ok?: boolean; project?: ProjectPayload; message?: string };
+  if (!response.ok || !payload.ok) throw new Error(payload.message || ('Edit op failed: ' + op));
+  if (payload.project) renderProject(payload.project);
+}
 
 interface SamTrackPayload {
   prompt: string;
@@ -155,6 +273,7 @@ function loadFile(file: File): void {
   errorText!.textContent = '';
   currentFile = file;
   send({ type: 'load', file });
+  void registerClip(file);
 }
 async function uploadClipForTrack(prompt: string, requestId: string): Promise<void> {
   if (!currentFile) throw new Error('Load a video before tracking an object');
@@ -230,6 +349,11 @@ function connectBridge(): void {
     const track = JSON.parse((event as MessageEvent<string>).data) as SamTrackPayload;
     forwardMaskTrack(track);
   });
+  events.addEventListener('project', (event) => {
+    try {
+      renderProject(JSON.parse((event as MessageEvent<string>).data) as ProjectPayload);
+    } catch { /* project events are informational */ }
+  });
   events.addEventListener('playback', (event) => {
     const payload = JSON.parse((event as MessageEvent<string>).data) as { action?: string; time?: number };
     if (payload.action === 'play') send({ type: 'play' });
@@ -242,6 +366,8 @@ function connectBridge(): void {
 }
 function renderState(state: PlayerState): void {
   currentState = state;
+  updateCaptionOverlay(state.mediaTime);
+  advanceIfNeeded(state);
   publishBrowserState(state);
   statusText!.textContent = state.phase + ' - ' + state.message;
   const frameBits = [
@@ -358,6 +484,40 @@ timeline.addEventListener('change', () => {
   scrubbing = false;
   seekFromInputs(Number(timeline.value));
 });
+undoBtn.addEventListener('click', () => {
+  void editOp('undo').catch((error: unknown) => { errorText!.textContent = error instanceof Error ? error.message : String(error); });
+});
+redoBtn.addEventListener('click', () => {
+  void editOp('redo').catch((error: unknown) => { errorText!.textContent = error instanceof Error ? error.message : String(error); });
+});
+exportBtn.addEventListener('click', () => {
+  exportBtn.disabled = true;
+  exportStatus.textContent = 'Exporting...';
+  void fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preset: exportPreset.value }),
+  }).then(async (response) => {
+    const payload = await response.json() as { ok?: boolean; url?: string; srtFile?: string; message?: string };
+    if (!response.ok || !payload.ok || !payload.url) throw new Error(payload.message || 'Export failed');
+    const link = document.createElement('a');
+    link.href = payload.url;
+    link.textContent = 'Download MP4';
+    exportStatus.replaceChildren(link);
+    if (payload.srtFile) {
+      const srtLink = document.createElement('a');
+      srtLink.href = '/api/export/file?name=' + encodeURIComponent(payload.srtFile);
+      srtLink.textContent = 'SRT';
+      exportStatus.append(' · ', srtLink);
+    }
+  }).catch((error: unknown) => {
+    exportStatus.textContent = error instanceof Error ? error.message : String(error);
+  }).finally(() => { exportBtn.disabled = false; });
+});
+void fetch('/api/project').then(async (response) => {
+  const payload = await response.json() as { project?: ProjectPayload };
+  if (payload.project) renderProject(payload.project);
+}).catch(() => undefined);
 clearEffectsBtn.addEventListener('click', () => {
   void fetch('/api/effects/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
 });

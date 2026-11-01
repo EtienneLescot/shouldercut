@@ -221,6 +221,100 @@ server.registerTool('edit_segment', {
   body: JSON.stringify({ prompt: args.prompt, refImageUrl: args.refImageUrl, backend: args.backend, subjectLabel: args.subjectLabel, refLabel: args.refLabel, start: args.start, end: args.end }),
 })));
 
+const editOp = (op) => (args) => bridge('/api/edit/op', {
+  method: 'POST',
+  body: JSON.stringify({ op, ...args }),
+});
+
+server.registerTool('get_project', {
+  description: 'Read the edit graph (SPEC section 6): ordered clips with ids, source durations, in/out trims, captions, and total project duration. Call this before any edit operation to get clip ids; conversational references ("the other clip", "undo that") resolve against this state.',
+  inputSchema: {},
+  annotations: { readOnlyHint: true },
+}, async () => asToolResult(await bridge('/api/project')));
+
+server.registerTool('trim_clip', {
+  description: 'Trim a clip head/tail in the edit graph. Validated server-side; the operation is undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+    start: z.number().nonnegative().describe('New in point in seconds (source time).'),
+    end: z.number().positive().describe('New out point in seconds (source time).'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('trim')(args)));
+
+server.registerTool('split_clip', {
+  description: 'Split a clip at a source time into two consecutive clips in the edit graph. Undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+    at: z.number().positive().describe('Split point in seconds (source time, inside the current in/out range).'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('split')(args)));
+
+server.registerTool('move_clip', {
+  description: 'Reorder a clip to a new zero-based index in the edit graph. Undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+    toIndex: z.number().int().nonnegative().describe('Target index in the clip list.'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('move')(args)));
+
+server.registerTool('delete_clip', {
+  description: 'Remove a clip from the edit graph. Undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('delete')(args)));
+
+server.registerTool('remove_silences', {
+  description: 'Detect silences in a clip audio (ffmpeg silencedetect) and cut them in the edit graph, replacing the clip by its kept ranges. Undoable. Clips without audio are left unchanged.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+    thresholdDb: z.number().optional().describe('Silence threshold in dB (default -35).'),
+    minSilence: z.number().positive().optional().describe('Minimum silence duration in seconds (default 0.45).'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('remove_silences')(args)));
+
+server.registerTool('set_captions', {
+  description: 'Set caption cues on a clip (source-time seconds) and enable/disable the caption layer. Cues feed the preview overlay, the project SRT and the burned-in export subtitles. When transcribing, turn-level timestamps split into cues proportionally to text length (SPEC 2.2). Undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+    cues: z.array(z.object({
+      start: z.number().nonnegative(),
+      end: z.number().positive(),
+      text: z.string().min(1),
+    })).describe('Caption cues in source time.'),
+    enabled: z.boolean().optional().describe('Caption layer on/off (default true).'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await editOp('captions')(args)));
+
+server.registerTool('undo', {
+  description: 'Undo the last edit-graph operation ("undo that"). Shader effects are not covered; use remove_shader_effect for those.',
+  inputSchema: {},
+  annotations: { readOnlyHint: false },
+}, async () => asToolResult(await editOp('undo')({})));
+
+server.registerTool('redo', {
+  description: 'Redo the last undone edit-graph operation.',
+  inputSchema: {},
+  annotations: { readOnlyHint: false },
+}, async () => asToolResult(await editOp('redo')({})));
+
+server.registerTool('export_video', {
+  description: 'Export the edit graph to MP4 (H.264 + AAC): clips concatenated in graph order with their trims, preset scaling, and enabled captions burned in. Also writes the project SRT next to it. Returns the download URL path.',
+  inputSchema: {
+    preset: z.enum(['1080p', 'vertical-1080x1920', 'square']).optional().describe('Export preset (default 1080p).'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await bridge('/api/export', {
+  method: 'POST',
+  body: JSON.stringify({ preset: args.preset || '1080p' }),
+})));
+
 server.registerTool('get_generation_job', {
   description: 'Poll one generation job by id. On done, file names under files can be fetched from the bridge at /api/gen/files/<name>. States: preparing, queued, running, done, failed.',
   inputSchema: { id: z.string().min(1) },

@@ -46,9 +46,22 @@ section will list each shipped feature as it lands.
   (`rayDir`, `worldToUv`, SDF/lighting stdlib, camera `target`/`roll`)
   and host-simulated GPU particles (compute `particleInit`/
   `particleUpdate` + billboard sprites in the same world space)
+- [x] Edit graph and editing operations (SPEC §6-7): server-side project
+  document (clips, in/out trims, captions), agent operations over MCP
+  (`get_project`, `trim_clip`, `split_clip`, `move_clip`, `delete_clip`,
+  `remove_silences` via ffmpeg silencedetect, `set_captions`, `undo`,
+  `redo`), caption cues in the preview overlay, project SRT export, and
+  MP4 export (`export_video`: graph order + trims, H.264/AAC, burned-in
+  captions, 1080p / vertical / square presets). Finished generation
+  jobs join the graph as clips automatically. Project panel in the UI
+  with sequential preview playback across clips
+- [x] Tested ComfyUI workflow repertoire for the supervisor:
+  `server/comfy-workflows/` (SCAIL-2 character replacement, SCAIL-2
+  animation, local VACE inpainting) with fixed tested settings, exposed
+  via `list_comfy_workflows` and the `scail` / `scail-animate` /
+  `vace-local` backends of `edit_segment`
 - [ ] Muse Spark editing agent (Supervisor) and edit graph
 - [ ] Voice loop on stimm with Muse Voice Transcribe
-- [ ] Editing operations, captions, MP4 export
 
 ## Pre-existing dependencies
 
