@@ -28,6 +28,8 @@ const trackForm = document.querySelector<HTMLFormElement>('#trackForm');
 const trackPrompt = document.querySelector<HTMLInputElement>('#trackPrompt');
 const trackBtn = document.querySelector<HTMLButtonElement>('#trackBtn');
 const trackStatus = document.querySelector<HTMLElement>('#trackStatus');
+const voiceBtn = document.querySelector<HTMLButtonElement>('#voiceBtn');
+const voiceStatus = document.querySelector<HTMLElement>('#voiceStatus');
 const captionOverlay = document.querySelector<HTMLElement>('#captionOverlay');
 const clipList = document.querySelector<HTMLElement>('#clipList');
 const projectStatus = document.querySelector<HTMLElement>('#projectStatus');
@@ -41,7 +43,7 @@ if (!canvas || !fileInput || !playPauseBtn || !stepBackBtn || !stepForwardBtn ||
   || !seekSeconds || !timeline || !statusText || !frameText || !mediaText || !decoderText
   || !errorText || !emptyState || !stage || !dropHint || !agentStatus || !chatLog || !chatForm
   || !chatInput || !chatSendBtn || !clearEffectsBtn || !effectsList || !trackForm || !trackPrompt
-  || !trackBtn || !trackStatus || !captionOverlay || !clipList || !projectStatus || !undoBtn
+  || !trackBtn || !trackStatus || !voiceBtn || !voiceStatus || !captionOverlay || !clipList || !projectStatus || !undoBtn
   || !redoBtn || !exportPreset || !exportBtn || !exportStatus) {
   throw new Error('Missing application controls');
 }
@@ -556,6 +558,63 @@ trackForm.addEventListener('submit', (event) => {
     errorText.textContent = error instanceof Error ? error.message : String(error);
   }).finally(() => {
     trackBtn.disabled = false;
+  });
+});
+// Push-to-talk fallback (SPEC §4): hold Talk, speak, release. The preview
+// pauses while recording; the transcript and the agent reply appear as
+// lines under the video and the confirmation is spoken back.
+let mediaRecorder: MediaRecorder | null = null;
+let voiceChunks: Blob[] = [];
+voiceBtn.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  void navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+    voiceChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    send({ type: 'pause' });
+    mediaRecorder.addEventListener('dataavailable', (e) => { if (e.data.size) voiceChunks.push(e.data); });
+    mediaRecorder.addEventListener('stop', () => {
+      stream.getTracks().forEach((t) => t.stop());
+      voiceBtn.textContent = 'Talk';
+      const blob = new Blob(voiceChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
+      voiceStatus.textContent = 'Transcribing...';
+      void blob.arrayBuffer().then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return fetch('/api/voice/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioB64: btoa(binary), history: chatHistory.slice() }),
+        });
+      }).then(async (response) => {
+        const payload = await response.json() as { ok?: boolean; transcript?: string; reply?: string; message?: string; effects?: ShaderEffectDefinition[] };
+        if (!response.ok || !payload.ok) throw new Error(payload.message || 'Voice command failed');
+        addChatMessage('user', payload.transcript || '(voice)');
+        if (Array.isArray(payload.effects)) {
+          activeEffects.clear();
+          for (const effect of payload.effects) activeEffects.set(effect.id, effect);
+          renderEffects();
+        }
+        const reply = payload.reply || 'Done.';
+        addChatMessage('agent', reply);
+        voiceStatus.textContent = 'Heard: ' + (payload.transcript || '');
+        const spoken = reply.split(/(?<=[.!?])\s/)[0].slice(0, 180);
+        if (spoken && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(spoken));
+        }
+      }).catch((error: unknown) => {
+        voiceStatus.textContent = error instanceof Error ? error.message : String(error);
+      });
+    });
+    mediaRecorder.start();
+    voiceBtn.textContent = 'Stop';
+    voiceStatus.textContent = 'Listening... click Stop when done.';
+  }).catch((error: unknown) => {
+    voiceStatus.textContent = 'Microphone unavailable: ' + (error instanceof Error ? error.message : String(error));
   });
 });
 chatForm.addEventListener('submit', (event) => {

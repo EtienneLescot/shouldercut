@@ -8,7 +8,8 @@ import type { ShaderEffectDefinition } from '../src/render/protocol.js';
 import { trackVideo, type SamTrackResult } from './sam.js';
 import { GenJobManager, genFilePath, workingPreviewCode, type GenJob } from './gen-video.js';
 import { EditGraph, projectSrt, readExportFile } from './edit-graph.js';
-import { transcribeClipAudio } from './transcribe.js';
+import { transcribeClipAudio, transcribeCommandAudio } from './transcribe.js';
+import { writeFileSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 
 interface PendingCompile {
@@ -648,6 +649,24 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     effects.delete('__working-preview');
     broadcast('effect-remove', { id: '__working-preview' });
     sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/voice/command') {
+    // Push-to-talk fallback (SPEC §4): record -> transcribe -> same
+    // supervisor chat path as typed commands (full tool parity).
+    const body = JSON.parse((await readRawBody(req, 32 * 1024 * 1024)).toString('utf8')) as Record<string, unknown>;
+    const audioB64 = String(body.audioB64 || '');
+    if (!audioB64) throw new Error('audioB64 is required');
+    if (!clients.size || !browserState) throw new Error('Open the ShoulderCut page and load a video before using voice commands');
+    const workDir = resolve(process.cwd(), 'server', 'gen-output');
+    const inputPath = join(workDir, 'command-in-' + Date.now().toString(36) + '.webm');
+    writeFileSync(inputPath, Buffer.from(audioB64, 'base64'));
+    const transcript = await transcribeCommandAudio(inputPath, workDir);
+    const history = Array.isArray(body.history)
+      ? body.history.filter(isRecord).map((m) => ({ role: String(m.role || 'user'), text: String(m.text || '') }))
+      : [];
+    const result = await runClaude(transcript, history);
+    sendJson(res, 200, { ok: true, transcript, reply: result.reply, effects: [...effects.values()] });
     return;
   }
   if (req.method === 'POST' && pathname === '/api/chat') {

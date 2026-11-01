@@ -75,19 +75,11 @@ export function turnsToCues(turns: AsrTurn[], clipDuration: number): CaptionCue[
   return cues;
 }
 
-export async function transcribeClipAudio(
-  clipPath: string,
-  workDir: string,
-  clipDuration: number,
-): Promise<{ cues: CaptionCue[]; transcript: string; audioDurationMs: number }> {
-  const wavPath = join(workDir, 'transcribe-' + Date.now().toString(36) + '.wav');
-  await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-    '-i', clipPath, '-vn', '-ac', '1', '-ar', '16000', '-sample_fmt', 's16', wavPath]);
-  const audio = readFileSync(wavPath);
+async function transcribeWavBytes(audio: Buffer, mode: 'ENDPOINTING' | 'PUSH_TO_TALK'): Promise<AsrResult> {
   if (audio.length > 32 * 1024 * 1024) throw new Error('Audio exceeds the 32 MB transcription cap; trim the clip first');
   const form = new FormData();
   form.append('request', new Blob(
-    [JSON.stringify({ mode: 'ENDPOINTING', model: MODEL, audioEncoding: 'WAV' })],
+    [JSON.stringify({ mode, model: MODEL, audioEncoding: 'WAV' })],
     { type: 'application/json' },
   ));
   form.append('audio', new Blob([new Uint8Array(audio)], { type: 'audio/wav' }), 'audio.wav');
@@ -99,7 +91,18 @@ export async function transcribeClipAudio(
   if (!response.ok) {
     throw new Error('Muse Voice Transcribe failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 300));
   }
-  const result = (await response.json()) as AsrResult;
+  return (await response.json()) as AsrResult;
+}
+
+export async function transcribeClipAudio(
+  clipPath: string,
+  workDir: string,
+  clipDuration: number,
+): Promise<{ cues: CaptionCue[]; transcript: string; audioDurationMs: number }> {
+  const wavPath = join(workDir, 'transcribe-' + Date.now().toString(36) + '.wav');
+  await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
+    '-i', clipPath, '-vn', '-ac', '1', '-ar', '16000', '-sample_fmt', 's16', wavPath]);
+  const result = await transcribeWavBytes(readFileSync(wavPath), 'ENDPOINTING');
   const turns = result.turns ?? [];
   const cues = turnsToCues(turns, clipDuration);
   return {
@@ -107,4 +110,15 @@ export async function transcribeClipAudio(
     transcript: result.transcript ?? turns.map((t) => t.transcript || '').join(' ').trim(),
     audioDurationMs: result.audioDurationMs ?? 0,
   };
+}
+
+// Push-to-talk fallback (SPEC §4/§8): one recorded command in, transcript out.
+export async function transcribeCommandAudio(inputPath: string, workDir: string): Promise<string> {
+  const wavPath = join(workDir, 'command-' + Date.now().toString(36) + '.wav');
+  await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
+    '-i', inputPath, '-vn', '-ac', '1', '-ar', '16000', '-sample_fmt', 's16', wavPath]);
+  const result = await transcribeWavBytes(readFileSync(wavPath), 'PUSH_TO_TALK');
+  const text = (result.transcript ?? (result.turns ?? []).map((t) => t.transcript || '').join(' ')).trim();
+  if (!text) throw new Error('No speech recognized in the recording');
+  return text;
 }
