@@ -292,6 +292,17 @@ server.registerTool('set_captions', {
   annotations: { readOnlyHint: false },
 }, async (args) => asToolResult(await editOp('captions')(args)));
 
+server.registerTool('transcribe_captions', {
+  description: 'Transcribe a clip\'s speech with Muse Voice Transcribe (Meta API) and set the result as its caption cues. Turn-level timestamps are split into short cues proportionally to text length (SPEC 2.2). Use for "add captions", "subtitle this", or before silence/filler work that needs a transcript. Undoable.',
+  inputSchema: {
+    clipId: z.string().min(1).describe('Clip id from get_project.'),
+  },
+  annotations: { readOnlyHint: false },
+}, async (args) => asToolResult(await bridge('/api/captions/transcribe', {
+  method: 'POST',
+  body: JSON.stringify({ clipId: args.clipId }),
+})));
+
 server.registerTool('undo', {
   description: 'Undo the last edit-graph operation ("undo that"). Shader effects are not covered; use remove_shader_effect for those.',
   inputSchema: {},

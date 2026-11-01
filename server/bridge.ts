@@ -8,6 +8,7 @@ import type { ShaderEffectDefinition } from '../src/render/protocol.js';
 import { trackVideo, type SamTrackResult } from './sam.js';
 import { GenJobManager, genFilePath, workingPreviewCode, type GenJob } from './gen-video.js';
 import { EditGraph, projectSrt, readExportFile } from './edit-graph.js';
+import { transcribeClipAudio } from './transcribe.js';
 import { readFileSync } from 'node:fs';
 
 interface PendingCompile {
@@ -241,7 +242,7 @@ function fxPrompt(message: string, history: ChatMessage[]): string {
   const historyText = history.slice(-8).map((m) => m.role + ': ' + m.text).join('\n');
   return [
     'You are the ShoulderCut VFX agent: a professional special-effects and video-editing shader artist. You work only by writing free-form WGSL through the shouldercut-fx MCP tools. There is no effects catalog: every effect is code you invent.',
-    'Use ONLY these MCP tools: get_shader_interface, get_editing_craft, list_video_techniques, recommend_video_workflow, list_comfy_workflows, get_video_state, list_shader_effects, validate_shader, apply_shader_effect, remove_shader_effect, clear_shader_effects, seek_video, set_playing, track_object, generate_shot, edit_segment, get_generation_job, show_working_preview, clear_working_preview, get_project, trim_clip, split_clip, move_clip, delete_clip, remove_silences, set_captions, undo, redo, export_video, describe_frame.',
+    'Use ONLY these MCP tools: get_shader_interface, get_editing_craft, list_video_techniques, recommend_video_workflow, list_comfy_workflows, get_video_state, list_shader_effects, validate_shader, apply_shader_effect, remove_shader_effect, clear_shader_effects, seek_video, set_playing, track_object, generate_shot, edit_segment, get_generation_job, show_working_preview, clear_working_preview, get_project, trim_clip, split_clip, move_clip, delete_clip, remove_silences, set_captions, undo, redo, export_video, describe_frame, transcribe_captions.',
     'Editing (SPEC section 7): the edit graph is the source of truth for timeline structure. Call get_project first for clip ids, then trim_clip/split_clip/move_clip/delete_clip/remove_silences/set_captions; every op is validated and undoable (undo/redo). "undo that" = undo. "same on the other clip" = re-apply the same op/effect to the other clip id from get_project. Captions: set_captions with cues in source time; when transcribing speech, split long turns into cues proportionally to text length. export_video renders the graph (trims, order, burned captions) to MP4 and returns the download path; name it in your confirmation.',
     'Generative video (docs/generative-video-spec.md): before ANY generative job, call recommend_video_workflow once with the user request verbatim and follow the returned workflow: it picks the technique (character replacement, masked inpainting, instruction edit, motion transfer, generated insert...) and the backend in order, with economical test settings. Typical subject transformation: track_object, show_working_preview, then the planned generation call. Generation is asynchronous and takes minutes: submit, tell the user the job id and that it is running, and do not busy-poll in this turn unless the user explicitly waits. get_generation_job reports segment/control/result files when done. A stub provider result is a placeholder, never describe it as AI generation. Backends marked available/planned in the plan are not wired yet: say so and use the implemented fallback or ask. Clear the working preview when a draft lands or a job fails.',
     'Efficiency is a hard product constraint: the editor must stay fast. get_editing_craft(topic) loads one small distilled craft topic (colour, camera, beat, captions): call it only when the request touches that craft, at most one topic unless the request spans two, never during WGSL error iteration, and never reload a topic already read. For plain effects, load no craft at all. After applying, at most one verify-and-fix pass; prefer measured acceptance (no new clipping, natural faces) over repeated re-rendering.',
@@ -369,6 +370,26 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
     else throw new Error('Unknown edit op: ' + op);
     broadcast('project', editGraph.get());
     sendJson(res, 200, { ok: true, op: label, project: editGraph.get(), totalDuration: editGraph.totalDuration() });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/captions/transcribe') {
+    const body = await readJson(req);
+    const clipId = String(body.clipId || '');
+    const clip = editGraph.getClip(clipId);
+    const result = await transcribeClipAudio(
+      editGraph.clipPath(clipId),
+      resolve(process.cwd(), 'server', 'gen-output'),
+      clip.duration,
+    );
+    if (!result.cues.length) {
+      sendJson(res, 200, { ok: true, cues: [], transcript: result.transcript, note: 'No speech turns returned; captions left unchanged.' });
+      return;
+    }
+    // Transcription covers the full source; keep only cues in the trim range.
+    const cues = result.cues.filter((c) => c.end > clip.in && c.start < clip.out);
+    editGraph.setCaptions(clipId, cues, true);
+    broadcast('project', editGraph.get());
+    sendJson(res, 200, { ok: true, cues, transcript: result.transcript, project: editGraph.get() });
     return;
   }
   if (req.method === 'POST' && pathname === '/api/export') {

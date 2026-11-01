@@ -97,6 +97,12 @@ export class EditGraph {
   get(): Project {
     return JSON.parse(JSON.stringify(this.project)) as Project;
   }
+  getClip(id: string): ProjectClip {
+    return { ...this.find(id) };
+  }
+  clipPath(id: string): string {
+    return clipFilePath(this.find(id).hash);
+  }
   totalDuration(): number {
     return this.project.clips.reduce((sum, c) => sum + (c.out - c.in), 0);
   }
