@@ -72,7 +72,8 @@ export type WorkerCommand =
   | { type: 'removeEffect'; effectId: string }
   | { type: 'clearEffects' }
   | { type: 'setMaskTrack'; track: MaskTrackData }
-  | { type: 'clearMaskTrack' };
+  | { type: 'clearMaskTrack' }
+  | { type: 'captureFrame'; requestId: string };
 
 export type PlayerPhase =
   | 'starting'
@@ -117,7 +118,18 @@ export interface EffectCompileResult {
   errors: string[];
 }
 
+export interface FrameCaptureResult {
+  requestId: string;
+  ok: boolean;
+  message: string;
+  mediaTime: number;
+  width: number;
+  height: number;
+  png: ArrayBuffer | null;
+}
+
 export type WorkerEvent =
   | { type: 'state'; state: PlayerState }
   | { type: 'error'; message: string }
-  | { type: 'effectResult'; result: EffectCompileResult };
+  | { type: 'effectResult'; result: EffectCompileResult }
+  | { type: 'frameResult'; result: FrameCaptureResult };

@@ -315,6 +315,26 @@ server.registerTool('export_video', {
   body: JSON.stringify({ preset: args.preset || '1080p' }),
 })));
 
+server.registerTool('describe_frame', {
+  description: 'Capture the current preview frame (optionally after seeking to a time) and return it as an image, for visual grounding: resolving spoken references ("the red car"), checking an effect result, or describing what is on screen. Read-only.',
+  inputSchema: {
+    time: z.number().nonnegative().optional().describe('Optional source time in seconds to seek to before capturing.'),
+  },
+  annotations: { readOnlyHint: true },
+}, async (args) => {
+  const data = await bridge('/api/frame/describe', {
+    method: 'POST',
+    body: JSON.stringify({ time: args.time }),
+  });
+  if (!data.ok || !data.pngB64) return asToolResult({ ok: false, message: data.message || 'Frame capture failed' });
+  return {
+    content: [
+      { type: 'text', text: 'Frame at ' + Number(data.mediaTime).toFixed(3) + 's (' + data.width + 'x' + data.height + ')' },
+      { type: 'image', data: data.pngB64, mimeType: 'image/png' },
+    ],
+  };
+});
+
 server.registerTool('get_generation_job', {
   description: 'Poll one generation job by id. On done, file names under files can be fetched from the bridge at /api/gen/files/<name>. States: preparing, queued, running, done, failed.',
   inputSchema: { id: z.string().min(1) },

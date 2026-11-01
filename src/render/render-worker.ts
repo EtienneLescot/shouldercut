@@ -8,6 +8,7 @@ import {
 } from 'mediabunny';
 import type {
   EffectCompileResult,
+  FrameCaptureResult,
   MaskTrackData,
   PlayerPhase,
   PlayerState,
@@ -555,6 +556,7 @@ class GpuPresenter {
   setDuration(duration: number): void {
     this.clipDuration = duration;
   }
+
   private async compileModule(label: string, code: string): Promise<{ shaderModule: GPUShaderModule; errors: string[] }> {
     if (!this.device) throw new Error('GPU presenter is not initialised');
     const shaderModule = this.device.createShaderModule({ label, code });
@@ -1452,6 +1454,35 @@ class FramePlayer {
   listEffects(): ShaderEffectDefinition[] {
     return this.presenter.listEffects();
   }
+  async captureFrame(requestId: string): Promise<void> {
+    try {
+      // Capture the decoded source frame (clean, synchronous) rather than
+      // the WebGPU swapchain, whose readback races presentation.
+      if (!this.lastPresented) throw new Error('No frame presented yet');
+      const frame = this.lastPresented.clone();
+      try {
+        const snapshot = new OffscreenCanvas(frame.displayWidth, frame.displayHeight);
+        const ctx = snapshot.getContext('2d');
+        if (!ctx) throw new Error('Could not create snapshot context');
+        ctx.drawImage(frame, 0, 0);
+        const blob = await snapshot.convertToBlob({ type: 'image/png' });
+        const png = await blob.arrayBuffer();
+        const result: FrameCaptureResult = {
+          requestId, ok: true, message: 'Source frame captured (without shader preview)',
+          mediaTime: state.mediaTime, width: frame.displayWidth, height: frame.displayHeight, png,
+        };
+        scope.postMessage({ type: 'frameResult', result } satisfies WorkerEvent, { transfer: [png] });
+      } finally {
+        frame.close();
+      }
+    } catch (error) {
+      const result: FrameCaptureResult = {
+        requestId, ok: false, message: error instanceof Error ? error.message : String(error),
+        mediaTime: state.mediaTime, width: 0, height: 0, png: null,
+      };
+      scope.postMessage({ type: 'frameResult', result } satisfies WorkerEvent);
+    }
+  }
 }
 
 const player = new FramePlayer();
@@ -1472,6 +1503,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerCommand>) => {
         case 'clearEffects': player.clearEffects(); break;
         case 'setMaskTrack': player.setMaskTrack(command.track); break;
         case 'clearMaskTrack': player.clearMaskTrack(); break;
+        case 'captureFrame': await player.captureFrame(command.requestId); break;
       }
     } catch (error) {
       postError(error);

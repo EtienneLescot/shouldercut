@@ -354,6 +354,11 @@ function connectBridge(): void {
       renderProject(JSON.parse((event as MessageEvent<string>).data) as ProjectPayload);
     } catch { /* project events are informational */ }
   });
+  events.addEventListener('frame-request', (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as { requestId: string; time?: number | null };
+    if (typeof payload.time === 'number') send({ type: 'seek', time: payload.time });
+    setTimeout(() => send({ type: 'captureFrame', requestId: payload.requestId }), typeof payload.time === 'number' ? 500 : 0);
+  });
   events.addEventListener('playback', (event) => {
     const payload = JSON.parse((event as MessageEvent<string>).data) as { action?: string; time?: number };
     if (payload.action === 'play') send({ type: 'play' });
@@ -428,6 +433,26 @@ worker.addEventListener('message', (event: MessageEvent<WorkerEvent>) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data.result),
+    }).catch(() => undefined);
+  }
+  if (data.type === 'frameResult') {
+    const r = data.result;
+    let pngB64: string | null = null;
+    if (r.png) {
+      const bytes = new Uint8Array(r.png);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      pngB64 = btoa(binary);
+    }
+    void fetch('/api/frame/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requestId: r.requestId, ok: r.ok, message: r.message,
+        mediaTime: r.mediaTime, width: r.width, height: r.height, pngB64,
+      }),
     }).catch(() => undefined);
   }
   if (data.type === 'error') {
