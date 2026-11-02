@@ -11,9 +11,9 @@ ShoulderCut becomes a complete generation + editing + VFX studio with
 supervisor plans; SAM 3.1 shows *where*; third-party video models
 generate or transform footage behind a provider interface; the WGSL
 shader host finishes and recomposites in real time. Meta supplies the
-brain (Muse Spark as supervisor, planned), the ears and voice (Muse
-Voice Transcribe STT, Meta TTS through the imported stimm runtime),
-the segmentation (SAM 3.1) and still images (Muse Image). Video
+brain (Muse Code as the shipped supervisor), the ears (Muse
+Voice Transcribe, push-to-talk) and the segmentation (SAM 3.1).
+Video
 generation is consumed through APIs, because frontier video models
 will not be reachable at demo quality or speed on a local GPU; the
 provider slot is designed so Meta's Muse Video replaces the
@@ -143,7 +143,7 @@ VRAM state) that the opinionated layer exists to remove.
 ## 5. Target architecture
 
 ```
- voice/text ──► Supervisor (Muse Spark, Meta STT/TTS via stimm)
+ voice/text ──► Supervisor (Muse Code, Muse Voice Transcribe STT)
                     │ plans, asks at most one question, confirms cost
                     ▼
               MCP tool surface (shouldercut-fx, extended)
@@ -170,12 +170,14 @@ VRAM state) that the opinionated layer exists to remove.
 
 Components:
 
-- **Supervisor.** Muse Spark (Meta Model API) as the planning
-  model, stimm fast-agent pattern for immediate spoken
-  acknowledgement, Muse Voice Transcribe for STT. It decomposes a
-  command into tool calls, states derived numbers (segment, subject,
-  estimated cost) before spending, and asks at most one question
-  when the target is ambiguous between two visible subjects.
+- **Supervisor.** Muse Code (`muse exec`) hosting the
+  `shouldercut-fx` MCP server, with Muse Voice Transcribe for
+  push-to-talk STT. It decomposes a command into tool calls, states
+  derived numbers (segment, subject, estimated cost) before
+  spending, and asks at most one question when the target is
+  ambiguous between two visible subjects. Immediate feedback is
+  visual, through `show_working_preview`, not a spoken
+  acknowledgement (SPEC §13).
 - **Provider interface `GenVideoProvider`.** One server-side
   interface, three backends, keys never in the browser:
   `submit(job) -> jobId`, `status(jobId)`, `result(jobId) -> clip`.
@@ -371,9 +373,10 @@ is green.
 
 Open questions: Q1 — fal account and Runway account provisioning
 and spend limits (owner action). Q2 — multi-subject mask union
-semantics in the SAM adapter. Q3 — whether Muse Spark is wired
-as supervisor before the demo freeze or the current Muse
-harness keeps the role (interface is identical either way).
+semantics in the SAM adapter. Q3 — **closed Oct 31**: the Muse Code
+harness keeps the supervisor role; Muse Spark is not wired (SPEC
+§13). The MCP interface is identical either way, so this is
+reversible after the event.
 
 ## 11. Technique registry: the supervisor's added value
 

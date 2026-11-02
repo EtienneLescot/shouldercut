@@ -5,7 +5,8 @@ Your video editor, standing over your shoulder: you talk, it cuts.
 Meta Global AI Developer Hackathon — Indie Developer track.
 Problem statement: Build for Your World.
 
-Status: day 1 (Oct 27, 2026). Specification: [docs/SPEC.md](docs/SPEC.md).
+Status: day 7 of 9 (Nov 2, 2026), feature-complete on the P0 scope.
+Specification: [docs/SPEC.md](docs/SPEC.md), kept current with the build.
 
 ## Built during the hackathon
 
@@ -60,17 +61,31 @@ section will list each shipped feature as it lands.
   animation, local VACE inpainting) with fixed tested settings, exposed
   via `list_comfy_workflows` and the `scail` / `scail-animate` /
   `vace-local` backends of `edit_segment`
-- [ ] Muse Spark editing agent (Supervisor) and edit graph
-- [ ] Voice loop on stimm with Muse Voice Transcribe
+- [x] Voice commands by push-to-talk: hold Talk, speak, release; the
+  browser records, Muse Voice Transcribe transcribes, and the transcript
+  runs through the same supervisor path as a typed command, with full
+  tool parity. Replaces the planned LiveKit dual-agent runtime
+  (SPEC §13); the "something is happening" feedback is visual, through
+  the optimistic working preview
+- [x] Supervisor: Muse Code (`muse exec`) hosting the `shouldercut-fx`
+  MCP server as its whole tool surface — 31 tools over shaders, masks,
+  the edit graph, generation and the technique registry. One harness
+  serves chat and voice
+
+Not built, cut deliberately (SPEC §11): Muse Image plates as shader
+inputs, dissolve transitions, caption style variants, filler-word
+removal, reframing beyond the three export presets, music-bed ducking.
 
 ## Pre-existing dependencies
 
 Declared dependencies that existed before the event. They are plumbing,
 not hackathon work, and are never presented as built during the event.
 
-- `stimm` (MIT, author's published package) — optimistic voice UI runtime
-  on LiveKit, imported with `@stimm/protocol`. The editing Supervisor
-  and tool bridge around it are built during the event.
+**All third-party.** ShoulderCut imports no first-party package: the
+author's own published `stimm` runtime was planned as a declared MIT
+import for the voice loop and is not used in the shipped build
+(SPEC §0, §13). Every line of ShoulderCut is event work.
+
 - `mediabunny` (third-party) — media demuxing and `VideoDecoderConfig`
   extraction. Decoding, seeking, buffering, and rendering around it are
   built during the event.
@@ -81,6 +96,11 @@ not hackathon work, and are never presented as built during the event.
   adapter, mask expansion, GPU upload, and `maskAt()` wiring around it
   are built during the event.
 - Vite and TypeScript (third-party) — build tooling.
+
+External tools invoked, not bundled: `ffmpeg` (segment extraction, edge
+control, silence detection, export mux), Muse Code CLI (`muse exec`, the
+supervisor), and optionally a local ComfyUI server with the SCAIL-2 and
+VACE open-weight models for the local `edit_segment` backends.
 
 ## Development
 
@@ -96,11 +116,21 @@ Muse (`muse exec`) with the `shouldercut-fx` MCP server; the agent
 writes WGSL against `docs/fx-interface.md`, and the browser compiles it
 live. Muse must be installed and logged in on this machine.
 
+Voice: hold the **Talk** button, speak a command, release.
+
 Secrets live in a local `.env` file (never committed):
 
 ```
-MODEL_API_KEY=...
+MODEL_API_KEY=...        # Meta Model API: SAM 3.1 + Muse Voice Transcribe
+MUSE_API_KEY=...         # Muse Code CLI, if not already logged in
+FAL_KEY=...              # optional: hosted generative-video backends
+COMFY_URL=...            # optional: local ComfyUI (default 127.0.0.1:8188)
+GEN_PROVIDER=stub|fal|comfy
 ```
 
-See [docs/SPEC.md](docs/SPEC.md) for architecture, scope, and the
-day-by-day plan.
+Credit spend per feature is logged in [docs/costs.md](docs/costs.md).
+
+See [docs/SPEC.md](docs/SPEC.md) for architecture, scope, the
+day-by-day plan, and the recorded deviations from it.
+
+MIT licensed, see [LICENSE](LICENSE).
