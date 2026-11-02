@@ -1,13 +1,18 @@
 import {
   ALL_FORMATS,
   BlobSource,
+  BufferTarget,
+  CanvasSource,
   EncodedPacketSink,
   Input,
+  Mp4OutputFormat,
+  Output,
   type EncodedPacket,
   type InputVideoTrack,
 } from 'mediabunny';
 import type {
   EffectCompileResult,
+  ExportRenderResult,
   FrameCaptureResult,
   MaskTrackData,
   PlayerPhase,
@@ -1078,8 +1083,10 @@ class FramePlayer {
   private firstTimestamp = 0;
   private lastStatePost = 0;
   private lastPresented: VideoFrame | null = null;
+  private canvas: OffscreenCanvas | null = null;
 
   async init(canvas: OffscreenCanvas): Promise<void> {
+    this.canvas = canvas;
     await this.presenter.init(canvas);
     postState('idle', 'Choose a video file');
   }
@@ -1483,6 +1490,67 @@ class FramePlayer {
       scope.postMessage({ type: 'frameResult', result } satisfies WorkerEvent);
     }
   }
+  /**
+   * Render [start, end) through the effect chain and mux it to MP4. This is
+   * the only path that bakes agent-written shaders into a file: ffmpeg on the
+   * server never sees them, it only has the untouched source.
+   */
+  async exportRange(requestId: string, start: number, end: number, bitrate: number): Promise<void> {
+    let output: Output | null = null;
+    let frames = 0;
+    try {
+      if (!this.decoder || !this.canvas) throw new Error('Load a video before exporting');
+      this.pause();
+      // Seek first: the canvas takes the source size on its first present and
+      // the encoder locks onto those dimensions when the source is created.
+      await this.seek(start);
+      const generation = this.generation;
+      const canvas = this.canvas;
+      const fallbackDuration = state.frameRate ? 1 / state.frameRate : 1 / 30;
+      const source = new CanvasSource(canvas, { codec: 'avc', bitrate });
+      output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+      output.addVideoTrack(source);
+      await output.start();
+      // The seek already presented the first frame of the range.
+      if (state.frameTimestamp !== null) {
+        await source.add(0, state.frameDuration ?? fallbackDuration);
+        frames += 1;
+      }
+      while (generation === this.generation) {
+        while (generation === this.generation && this.queue.length === 0) {
+          await this.ensureBuffered(4, generation);
+          await sleep(1);
+          if (this.packetsDone && this.flushStarted && this.decoder.decodeQueueSize === 0) break;
+        }
+        const frame = this.queue.shift();
+        if (!frame) break;
+        const timestamp = frameSeconds(frame);
+        if (timestamp >= end) { frame.close(); break; }
+        const duration = frame.duration === null ? fallbackDuration : frame.duration / 1_000_000;
+        this.displayFrame(frame, timestamp);
+        await source.add(timestamp - start, duration);
+        frames += 1;
+        if (frames % 10 === 0) postState('seeking', 'Rendering effects: ' + frames + ' frames');
+      }
+      await output.finalize();
+      const buffer = (output.target as BufferTarget).buffer;
+      output = null;
+      if (!buffer) throw new Error('Muxer produced no output');
+      const result: ExportRenderResult = {
+        requestId, ok: true, message: 'Rendered ' + frames + ' frames with effects',
+        frames, width: canvas.width, height: canvas.height, mp4: buffer,
+      };
+      postState('paused', 'Render complete: ' + frames + ' frames');
+      scope.postMessage({ type: 'exportResult', result } satisfies WorkerEvent, { transfer: [buffer] });
+    } catch (error) {
+      if (output && output.state === 'started') await output.cancel().catch(() => {});
+      const result: ExportRenderResult = {
+        requestId, ok: false, message: error instanceof Error ? error.message : String(error),
+        frames, width: 0, height: 0, mp4: null,
+      };
+      scope.postMessage({ type: 'exportResult', result } satisfies WorkerEvent);
+    }
+  }
 }
 
 const player = new FramePlayer();
@@ -1504,6 +1572,7 @@ scope.addEventListener('message', (event: MessageEvent<WorkerCommand>) => {
         case 'setMaskTrack': player.setMaskTrack(command.track); break;
         case 'clearMaskTrack': player.clearMaskTrack(); break;
         case 'captureFrame': await player.captureFrame(command.requestId); break;
+        case 'exportRange': await player.exportRange(command.requestId, command.start, command.end, command.bitrate); break;
       }
     } catch (error) {
       postError(error);

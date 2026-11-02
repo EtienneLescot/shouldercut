@@ -338,7 +338,10 @@ Components, all written during the event (no first-party import, §0):
   compilation, ping-pong textures, mask textures, and later temporal
   history buffers as host capabilities. Demux/decode with WebCodecs;
   MP4 mux on export. Third-party demux/mux helpers allowed if declared
-  (Mediabunny, in use).
+  (Mediabunny, in use). The worker is also the only path that bakes
+  effects into a file: `exportRange` walks a clip frame by frame through
+  the same pass chain as the preview and muxes the result, because the
+  server's ffmpeg only ever sees untouched sources.
 - **Edit graph** (§6). Single source of truth; the renderer and the agent
   both consume it. Undo is graph history, rendering is a pure function of
   (graph, time).
@@ -459,7 +462,7 @@ in six groups:
 | `set_captions` | clipId, cues, on/off | caption layer + SRT data |
 | `transcribe_captions` | clipId | Muse Voice Transcribe → caption cues split by text length |
 | `undo` / `redo` | steps (default 1) | graph history |
-| `export_video` | preset (`1080p`, `vertical`, `square`) | render + mux, burned-in captions |
+| `export_video` | preset (`1080p`, `vertical`, `square`) | renders the loaded clip's shader chain in the worker, muxes it with the source audio, applies the preset and burns in captions |
 
 **Generative video** (spec: `docs/generative-video-spec.md`)
 
@@ -570,14 +573,19 @@ room (§13).
 
 ## 12. Testing and demo
 
-Test status as of Nov 2: **no automated tests are written.** The perf
-harness (`tools/bench`) and the dated manual verifications in
-`docs/spikes.md` are what exists; every feature was accepted by running
-the demo path by hand. This is the largest known gap against the plan
-below, and the honest reason is that the build days went to features. If
-time remains after the demo is safe, the edit-graph tests are the first
-to write, being the cheapest and the ones a judge is most likely to break
-live.
+Test status as of Nov 2: **one automated test**, `npm test`
+(`tools/test-export.ts`), covering the export path — that a sub-1080p
+source fills the 1080p preset rather than sitting letterboxed, and that
+a clip rendered by the browser reaches the file with its audio intact.
+Both assertions were mutation-checked against the bugs they describe. It
+runs on node's native type stripping with no framework and no new
+dependency.
+
+Everything else is still unautomated: the perf harness (`tools/bench`)
+and the dated manual verifications in `docs/spikes.md` are what exists,
+and every other feature was accepted by running the demo path by hand.
+The edit-graph operations of §7 are the next cheapest to cover and the
+ones a judge is most likely to break live.
 
 Tests (planned):
 - Edit-graph operations: unit tests per tool in §7, including invalid-op

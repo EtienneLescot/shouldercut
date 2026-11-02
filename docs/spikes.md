@@ -203,3 +203,116 @@ for the WebGPU worker.
   fov 38). Before/after screenshots at 3.0 s show the push-in and
   lateral shift with the pillow layer displaced against the room.
   `npm run build` green.
+
+## Full demo path, end to end (Nov 2, 2026)
+
+First run of the whole demo path in one session since export and voice
+landed. Browser pane (Chromium, WebGPU on an NVIDIA Lovelace adapter),
+`npm run dev`, Muse Code 1.4.14, real Meta Model API keys. Source:
+`demo-a.mp4`, the stock hill/woman clip, 960×540, 24 fps, 6 s, no audio.
+
+**PASS — load and decode.** Drag-drop → Mediabunny demux → WebCodecs
+`avc1.64001f`, hardware decode, first frame presented, clip joins the
+edit graph (`1 clip(s) - 6.00 s total`).
+
+**PASS — free-form shader from chat.** "Rajoute-moi un effet
+d'explosion au milieu" → the agent wrote and compiled WGSL with a
+turbulent fireball, flash, shockwave and 3,500 GPU particles over
+2.3–5.2 s, then seeked the preview to the peak on its own. ~60 s from
+send to visible.
+
+**PASS — SAM mask + shader, the demo cold open.** "Enleve l'explosion.
+Floute l'arriere-plan et garde la femme nette." → the agent removed the
+first effect, tracked `woman` (144 frames, the whole clip) and wrote a
+masked blur. Subject sharp, background defocused. ~60 s. Mask edges
+carry a visible soft halo around hair and trailing arm; acceptable at
+demo scale, not a matte.
+
+**PASS — push-to-talk voice.** No mic available in this session, so a
+French command was synthesised locally (Windows SAPI, `fr-FR`
+Hortense), encoded to webm/opus and posted to `/api/voice/command`, the
+exact endpoint the Talk button hits. "Ajoute un flash lumineux à la fin
+du clip" transcribed as *"Ajoute un un flash lumineux à la fin du
+clip."* — one duplicated word, intent intact — and the supervisor
+applied a white flash over 5.1–6.0 s, verified visually at the 5.35 s
+peak. Round trip **37 s**, against the §9 budget of ≤ 2 s. The cost is
+the agent turn, not transcription. Clean TTS speech is an easy case:
+the §12 20-command FR/EN eval on real speech is still unrun.
+
+**FIXED — `1080p` export preset letterboxed every sub-1080p source.**
+`scale=min(1920\,iw):min(1080\,ih)` evaluates to the source size for
+anything smaller than 1080p, so a 960×540 clip was padded into a
+1920×1080 black frame as a centred postage stamp. Dropped the `min()`;
+`force_original_aspect_ratio=decrease` already does the fit. All three
+presets now fill the frame: 1920×1080, 1080×1920, 1080×1080, verified
+by ffprobe and by eye on an extracted frame.
+
+**OPEN, blocking the demo close — exports contain no shader effects.**
+`EditGraph.exportMp4` runs ffmpeg straight over the stored source files
+(`clipFilePath(clip.hash)`), applying trims, the scale/crop preset and
+burned-in captions. The WGSL effects live in the render worker and are
+never rendered into the file; there is no `VideoEncoder` anywhere in
+the codebase. Verified: exported a frame at 2.75 s with the masked blur
+active in the preview — the frame is raw source. The demo's closing
+beat ("export vertical" → finished MP4) would therefore play back a
+video with none of the effects the demo is about. Fixing it means
+rendering the pass chain in the worker and encoding with
+`VideoEncoder`, which is a real piece of work, not a patch.
+
+**Noted, not fixed:**
+- `describe_frame` returns the decoded *source* frame, deliberately
+  (`render-worker.ts:1459`: swapchain readback races presentation), so
+  the agent can never see its own effect. SPEC §7 calls it "read-only
+  visual context", which hides this.
+- The edit graph is in-memory only. The vite dev server restarts when
+  `server/*.ts` changes and the whole project document is lost; clip
+  bytes survive in `server/clip-store` because they are keyed by hash.
+  No persistence, despite SPEC §6 calling the project "one JSON
+  document, versioned, exportable, diffable".
+- The chat panel renders agent replies as plain text, so the Muse
+  `**Fait**` prefix shows its asterisks on screen.
+
+## GPU export: shaders baked into the file (Nov 2, 2026)
+
+Closes the blocking gap found earlier today. ffmpeg on the server only
+ever had untouched source files, so exports carried none of the
+agent's effects. The render worker now does the pixel work and the
+server keeps doing what it already did well.
+
+- **Worker** (`exportRange`): seeks to the clip's `in`, walks the decode
+  queue frame by frame to `out`, presents each frame through the full
+  effect chain, and feeds the canvas to Mediabunny's `CanvasSource`
+  (`avc`, 12 Mbps) into an `Mp4OutputFormat` over a `BufferTarget`.
+  Frame indices come from the same `displayFrame` path as playback, so
+  SAM mask tracks line up exactly as they do in the preview.
+- **Transport**: bridge broadcasts `export-render-request`, the page
+  picks the range from its active clip (it alone knows which clip is
+  loaded), and posts the MP4 back to `/api/export/render-result` as a
+  raw body — megabytes are too much for base64 in JSON.
+- **Server**: `exportMp4(preset, renders)` takes video from the render
+  (already trimmed) and audio from the source clip, then runs the same
+  scale/crop preset, concat and burned-in captions as before.
+- Mediabunny was already the declared muxer in SPEC §5 and already a
+  dependency; `VideoEncoder` is reached through it rather than by hand.
+
+Verified end to end: an invert shader over the whole clip exports as an
+inverted 1920×1080 MP4; the agent-written SAM-masked blur exports
+vertical with the subject sharp and the background blurred, and the
+sharp region **follows her** between 1.0 s and 5.0 s, so mask frame
+alignment survives the offline path. 144 source frames render, encode,
+mux and re-encode in **3 s**.
+
+Limits, deliberate:
+- Only the clip loaded in the editor is rendered. A multi-clip project
+  exports its other clips straight from source, because the effect model
+  has no clip ownership (SPEC §6) — effects carry a time range, not a
+  clip id.
+- The render is at source resolution; the preset scales afterwards, so
+  a 960×540 source still upscales softly into vertical 1080×1920.
+
+**First automated test in the repo**: `npm test`
+(`tools/test-export.ts`, run with node's native type stripping, no
+framework). It builds solid-colour clips with ffmpeg and samples one
+pixel of the export. Both regressions were mutation-checked: restoring
+the `min()` letterbox makes it fail with `corner was rgb(0,0,0)`, and
+ignoring the renders map makes it fail with `centre was rgb(253,0,0)`.

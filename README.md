@@ -53,7 +53,11 @@ section will list each shipped feature as it lands.
   `remove_silences` via ffmpeg silencedetect, `set_captions`, `undo`,
   `redo`), caption cues in the preview overlay, project SRT export, and
   MP4 export (`export_video`: graph order + trims, H.264/AAC, burned-in
-  captions, 1080p / vertical / square presets). Finished generation
+  captions, 1080p / vertical / square presets), with the agent's shaders
+  **rendered into the file**: the worker replays the clip through the
+  same WGSL pass chain as the preview and muxes it with Mediabunny, then
+  the server adds the source audio, the preset and the captions.
+  Finished generation
   jobs join the graph as clips automatically. Project panel in the UI
   with sequential preview playback across clips
 - [x] Tested ComfyUI workflow repertoire for the supervisor:
@@ -108,6 +112,9 @@ VACE open-weight models for the local `edit_segment` backends.
 npm install
 npm run dev
 ```
+
+Checks: `npm run build` typechecks and builds, `npm test` runs the
+export regression check (needs `ffmpeg` and `ffprobe` on PATH).
 
 Then open http://127.0.0.1:5173/ in Chrome or Edge, drag in a local
 MP4/WebM file, and ask in chat for any effect (for example

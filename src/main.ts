@@ -86,6 +86,26 @@ function activeClip(): ProjectClipPayload | null {
   return project?.clips.find((c) => c.id === activeClipId) ?? null;
 }
 
+let renderingClipId: string | null = null;
+
+/** Raw body: a rendered clip is megabytes, too big to base64 into JSON. */
+function postRenderResult(
+  requestId: string, ok: boolean, message: string, clipId: string, frames: number, mp4: ArrayBuffer | null,
+): Promise<unknown> {
+  return fetch('/api/export/render-result', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'video/mp4',
+      'x-request-id': requestId,
+      'x-ok': ok ? '1' : '0',
+      'x-message': encodeURIComponent(message),
+      'x-clip-id': clipId,
+      'x-frames': String(frames),
+    },
+    body: mp4 ?? new ArrayBuffer(0),
+  }).catch(() => undefined);
+}
+
 function renderProject(next: ProjectPayload): void {
   project = next;
   const total = next.clips.reduce((sum, c) => sum + (c.out - c.in), 0);
@@ -361,6 +381,23 @@ function connectBridge(): void {
     if (typeof payload.time === 'number') send({ type: 'seek', time: payload.time });
     setTimeout(() => send({ type: 'captureFrame', requestId: payload.requestId }), typeof payload.time === 'number' ? 500 : 0);
   });
+  events.addEventListener('export-render-request', (event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as { requestId: string; bitrate: number };
+    const clip = activeClip();
+    if (!clip) {
+      void postRenderResult(payload.requestId, false, 'No clip is loaded in the editor', '', 0, null);
+      return;
+    }
+    renderingClipId = clip.id;
+    exportStatus!.textContent = 'Rendering effects into the export...';
+    send({
+      type: 'exportRange',
+      requestId: payload.requestId,
+      start: clip.in,
+      end: clip.out,
+      bitrate: payload.bitrate,
+    });
+  });
   events.addEventListener('playback', (event) => {
     const payload = JSON.parse((event as MessageEvent<string>).data) as { action?: string; time?: number };
     if (payload.action === 'play') send({ type: 'play' });
@@ -456,6 +493,11 @@ worker.addEventListener('message', (event: MessageEvent<WorkerEvent>) => {
         mediaTime: r.mediaTime, width: r.width, height: r.height, pngB64,
       }),
     }).catch(() => undefined);
+  }
+  if (data.type === 'exportResult') {
+    const r = data.result;
+    void postRenderResult(r.requestId, r.ok, r.message, renderingClipId ?? '', r.frames, r.mp4);
+    renderingClipId = null;
   }
   if (data.type === 'error') {
     errorText!.textContent = data.message;

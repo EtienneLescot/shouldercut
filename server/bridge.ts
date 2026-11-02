@@ -209,6 +209,34 @@ interface PendingFrame {
 }
 const pendingFrames = new Map<string, PendingFrame>();
 
+interface RenderedClip { ok: boolean; message: string; clipId: string; frames: number; mp4: Buffer | null }
+interface PendingRender {
+  resolve: (value: RenderedClip) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+const pendingRenders = new Map<string, PendingRender>();
+
+/**
+ * Ask the browser to render [start, end) of the loaded clip through the
+ * shader chain and hand back an MP4. ffmpeg only ever sees untouched source
+ * files, so this is the only way effects reach an exported file.
+ */
+function requestRenderFromBrowser(): Promise<RenderedClip> {
+  if (!clients.size || !browserState) {
+    return Promise.resolve({ ok: false, message: 'No ShoulderCut browser editor is connected', clipId: '', frames: 0, mp4: null });
+  }
+  const requestId = 'render-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+  return new Promise((resolvePromise) => {
+    const timer = setTimeout(() => {
+      pendingRenders.delete(requestId);
+      resolvePromise({ ok: false, message: 'Effect render timed out', clipId: '', frames: 0, mp4: null });
+    }, 300_000);
+    pendingRenders.set(requestId, { resolve: resolvePromise, timer });
+    // The browser picks the range: it alone knows which clip is loaded.
+    broadcast('export-render-request', { requestId, bitrate: 12_000_000 });
+  });
+}
+
 function requestFrameFromBrowser(time?: number): Promise<{ ok: boolean; message: string; mediaTime: number; width: number; height: number; png: Buffer | null }> {
   if (!clients.size) {
     return Promise.resolve({ ok: false, message: 'No ShoulderCut browser editor is connected. Open http://127.0.0.1:5173/ first.', mediaTime: 0, width: 0, height: 0, png: null });
@@ -396,8 +424,23 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
   if (req.method === 'POST' && pathname === '/api/export') {
     const body = await readJson(req);
     const preset = body.preset === 'vertical-1080x1920' || body.preset === 'square' ? body.preset : '1080p';
-    const result = await editGraph.exportMp4(preset);
-    sendJson(res, 200, { ok: true, ...result, url: '/api/export/file?name=' + encodeURIComponent(result.file) });
+    // Bake the agent's shaders in first: ffmpeg only has untouched sources.
+    // Only the clip loaded in the editor can be rendered, so a multi-clip
+    // project exports its other clips straight from source.
+    const renders = new Map<string, Buffer>();
+    const live = [...effects.values()].filter((e) => e.enabled !== false && e.id !== '__working-preview');
+    if (live.length) {
+      const rendered = await requestRenderFromBrowser();
+      if (!rendered.ok || !rendered.mp4 || !rendered.clipId) {
+        throw new Error('Could not render effects for the export: ' + rendered.message);
+      }
+      renders.set(rendered.clipId, rendered.mp4);
+    }
+    const result = await editGraph.exportMp4(preset, renders);
+    sendJson(res, 200, {
+      ok: true, ...result, renderedClips: renders.size,
+      url: '/api/export/file?name=' + encodeURIComponent(result.file),
+    });
     return;
   }
   if (req.method === 'GET' && pathname === '/api/export/file') {
@@ -627,6 +670,24 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, pathname: st
         width: Number(body.width || 0),
         height: Number(body.height || 0),
         png: typeof body.pngB64 === 'string' ? Buffer.from(body.pngB64, 'base64') : null,
+      });
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+  if (req.method === 'POST' && pathname === '/api/export/render-result') {
+    const bytes = await readRawBody(req, 512 * 1024 * 1024);
+    const requestId = String(req.headers['x-request-id'] || '');
+    const entry = pendingRenders.get(requestId);
+    if (entry) {
+      pendingRenders.delete(requestId);
+      clearTimeout(entry.timer);
+      entry.resolve({
+        ok: req.headers['x-ok'] === '1',
+        message: decodeURIComponent(String(req.headers['x-message'] || '')),
+        clipId: String(req.headers['x-clip-id'] || ''),
+        frames: Number(req.headers['x-frames'] || 0),
+        mp4: bytes.length ? Buffer.from(bytes) : null,
       });
     }
     sendJson(res, 200, { ok: true });
