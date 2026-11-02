@@ -203,3 +203,243 @@ for the WebGPU worker.
   fov 38). Before/after screenshots at 3.0 s show the push-in and
   lateral shift with the pillow layer displaced against the room.
   `npm run build` green.
+
+## Full demo path, end to end (Nov 2, 2026)
+
+First run of the whole demo path in one session since export and voice
+landed. Browser pane (Chromium, WebGPU on an NVIDIA Lovelace adapter),
+`npm run dev`, Muse Code 1.4.14, real Meta Model API keys. Source:
+`demo-a.mp4`, the stock hill/woman clip, 960×540, 24 fps, 6 s, no audio.
+
+**PASS — load and decode.** Drag-drop → Mediabunny demux → WebCodecs
+`avc1.64001f`, hardware decode, first frame presented, clip joins the
+edit graph (`1 clip(s) - 6.00 s total`).
+
+**PASS — free-form shader from chat.** "Rajoute-moi un effet
+d'explosion au milieu" → the agent wrote and compiled WGSL with a
+turbulent fireball, flash, shockwave and 3,500 GPU particles over
+2.3–5.2 s, then seeked the preview to the peak on its own. ~60 s from
+send to visible.
+
+**PASS — SAM mask + shader, the demo cold open.** "Enleve l'explosion.
+Floute l'arriere-plan et garde la femme nette." → the agent removed the
+first effect, tracked `woman` (144 frames, the whole clip) and wrote a
+masked blur. Subject sharp, background defocused. ~60 s. Mask edges
+carry a visible soft halo around hair and trailing arm; acceptable at
+demo scale, not a matte.
+
+**PASS — push-to-talk voice.** No mic available in this session, so a
+French command was synthesised locally (Windows SAPI, `fr-FR`
+Hortense), encoded to webm/opus and posted to `/api/voice/command`, the
+exact endpoint the Talk button hits. "Ajoute un flash lumineux à la fin
+du clip" transcribed as *"Ajoute un un flash lumineux à la fin du
+clip."* — one duplicated word, intent intact — and the supervisor
+applied a white flash over 5.1–6.0 s, verified visually at the 5.35 s
+peak. Round trip **37 s**, against the §9 budget of ≤ 2 s. The cost is
+the agent turn, not transcription. Clean TTS speech is an easy case:
+the §12 20-command FR/EN eval on real speech is still unrun.
+
+**FIXED — `1080p` export preset letterboxed every sub-1080p source.**
+`scale=min(1920\,iw):min(1080\,ih)` evaluates to the source size for
+anything smaller than 1080p, so a 960×540 clip was padded into a
+1920×1080 black frame as a centred postage stamp. Dropped the `min()`;
+`force_original_aspect_ratio=decrease` already does the fit. All three
+presets now fill the frame: 1920×1080, 1080×1920, 1080×1080, verified
+by ffprobe and by eye on an extracted frame.
+
+**OPEN, blocking the demo close — exports contain no shader effects.**
+`EditGraph.exportMp4` runs ffmpeg straight over the stored source files
+(`clipFilePath(clip.hash)`), applying trims, the scale/crop preset and
+burned-in captions. The WGSL effects live in the render worker and are
+never rendered into the file; there is no `VideoEncoder` anywhere in
+the codebase. Verified: exported a frame at 2.75 s with the masked blur
+active in the preview — the frame is raw source. The demo's closing
+beat ("export vertical" → finished MP4) would therefore play back a
+video with none of the effects the demo is about. Fixing it means
+rendering the pass chain in the worker and encoding with
+`VideoEncoder`, which is a real piece of work, not a patch.
+
+**Noted, not fixed:**
+- `describe_frame` returns the decoded *source* frame, deliberately
+  (`render-worker.ts:1459`: swapchain readback races presentation), so
+  the agent can never see its own effect. SPEC §7 calls it "read-only
+  visual context", which hides this.
+- The edit graph is in-memory only. The vite dev server restarts when
+  `server/*.ts` changes and the whole project document is lost; clip
+  bytes survive in `server/clip-store` because they are keyed by hash.
+  No persistence, despite SPEC §6 calling the project "one JSON
+  document, versioned, exportable, diffable".
+- The chat panel renders agent replies as plain text, so the Muse
+  `**Fait**` prefix shows its asterisks on screen.
+
+## GPU export: shaders baked into the file (Nov 2, 2026)
+
+Closes the blocking gap found earlier today. ffmpeg on the server only
+ever had untouched source files, so exports carried none of the
+agent's effects. The render worker now does the pixel work and the
+server keeps doing what it already did well.
+
+- **Worker** (`exportRange`): seeks to the clip's `in`, walks the decode
+  queue frame by frame to `out`, presents each frame through the full
+  effect chain, and feeds the canvas to Mediabunny's `CanvasSource`
+  (`avc`, 12 Mbps) into an `Mp4OutputFormat` over a `BufferTarget`.
+  Frame indices come from the same `displayFrame` path as playback, so
+  SAM mask tracks line up exactly as they do in the preview.
+- **Transport**: bridge broadcasts `export-render-request`, the page
+  picks the range from its active clip (it alone knows which clip is
+  loaded), and posts the MP4 back to `/api/export/render-result` as a
+  raw body — megabytes are too much for base64 in JSON.
+- **Server**: `exportMp4(preset, renders)` takes video from the render
+  (already trimmed) and audio from the source clip, then runs the same
+  scale/crop preset, concat and burned-in captions as before.
+- Mediabunny was already the declared muxer in SPEC §5 and already a
+  dependency; `VideoEncoder` is reached through it rather than by hand.
+
+Verified end to end: an invert shader over the whole clip exports as an
+inverted 1920×1080 MP4; the agent-written SAM-masked blur exports
+vertical with the subject sharp and the background blurred, and the
+sharp region **follows her** between 1.0 s and 5.0 s, so mask frame
+alignment survives the offline path. 144 source frames render, encode,
+mux and re-encode in **3 s**.
+
+Limits, deliberate:
+- Only the clip loaded in the editor is rendered. A multi-clip project
+  exports its other clips straight from source, because the effect model
+  has no clip ownership (SPEC §6) — effects carry a time range, not a
+  clip id.
+- The render is at source resolution; the preset scales afterwards, so
+  a 960×540 source still upscales softly into vertical 1080×1920.
+
+**First automated test in the repo**: `npm test`
+(`tools/test-export.ts`, run with node's native type stripping, no
+framework). It builds solid-colour clips with ffmpeg and samples one
+pixel of the export. Both regressions were mutation-checked: restoring
+the `min()` letterbox makes it fail with `corner was rgb(0,0,0)`, and
+ignoring the renders map makes it fail with `centre was rgb(253,0,0)`.
+
+## Interface pass and the Muse mascot (Nov 2, 2026)
+
+The UI had been a stack of debug panels. It is now one screen with one
+control, because the product's claim is that you talk and it cuts.
+
+- **One state drives everything.** `document.body.dataset.ui` holds
+  `idle | listening | thinking | done | error`. CSS reads it for the
+  accent colour, the button, the frame treatment; the mascot reads it
+  for behaviour. Nothing animates from JavaScript per frame except the
+  mic meter, which writes a single `--level` custom property.
+- **The Talk button is the product.** Breathing ring when idle; while
+  listening, the ring and halo scale with the live microphone envelope
+  from an `AnalyserNode` and two concentric pulses radiate; while Muse
+  writes WGSL the ring becomes an orbiting arc; on success the core pops
+  and a light sweep crosses the picture. A scrim under the dock keeps
+  all of it legible over blown-out footage.
+- **Everything else is behind one button.** Project, playback,
+  transcript, tracking, shaders and export moved into a drawer, closed
+  by default. Every element id the app already queried is still in the
+  DOM, so none of the existing wiring changed.
+- **Muse**, the mascot, is Three.js built from primitives — no model
+  file, no loader, no asset to ship (`src/mascot.ts`). Rounded shell,
+  sunk visor, two emissive eyes, an antenna bulb that carries the state
+  at 90 px, and a work ring that only appears while editing. Idle: it
+  picks a new place to look every 1–3 s and holds it, blinks on a random
+  interval, floats. Listening: locks forward, eyes brighten, antenna
+  pulses with the mic. Thinking: head down, eyes narrowed, ring
+  orbiting, faster bob. Done: a nod.
+- Agent replies surface on a single line over the video, with the
+  `**Fait**` header stripped, rather than only in the transcript.
+
+Verified in the browser pane at 1024 px and at 375 px: idle, listening
+and thinking all read correctly, the drawer opens over the stage, and a
+real agent command (`"ajoute un halo doré chaud autour de la femme"`)
+runs through thinking → done with the shader landing in the preview.
+`npm run build` green. Three.js adds ~540 kB to the main bundle, which
+is a local demo app's problem to ignore.
+
+Correction to this morning's entry: the push-to-talk path **does** speak
+its reply — the browser's own `speechSynthesis` says the first sentence.
+What was dropped with stimm is Meta TTS, not spoken confirmation.
+
+## Mascot: Meta's Muse character (Nov 2, 2026)
+
+Replaces the invented robot. The agent's on-screen presence is now
+Meta's Muse mascot, rebuilt from Three.js primitives: cream fur, hooded
+head, two dot eyes, blushed cheeks, a small smile, stubby arms and feet.
+No Meta artwork or model file is copied and none ships; the figure is
+geometry and materials in `src/mascot.ts`. Credited as an homage in the
+README, with a line saying the project is not affiliated with Meta.
+
+Two things that took iterating:
+- **The face was invisible.** Sunk inside the hood sphere, so nothing
+  showed. Moving it proud of the hood front fixed that but produced a
+  ragged cream patch whose shape slid around as the head turned — the
+  intersection line of two ellipsoids is pose-dependent and ugly.
+- **A hood rim torus is what actually reads as a hood.** Placing a fur
+  ring over the seam hides the intersection entirely and gives the
+  silhouette its hooded shape in one primitive, at any head angle.
+
+State now shows without an antenna: the accent colour lives in the rim
+light and the CSS ground glow, the cheeks warm with the microphone
+level, the eyes widen while listening, narrow while editing and squint
+into a smile on success, and there is a short hop when a command lands.
+Legible at the 172 px the UI gives it, and at 92 px on narrow screens.
+
+## Mascot, second pass: generated instead of modelled (Nov 2, 2026)
+
+The hand-built primitive Jolly was not good enough, and hand-modelling an
+organic plush out of spheres was the wrong tool. The mesh is now
+**generated from a reference photo** by the local ComfyUI install — which
+is the same machinery the product already uses for `edit_segment`, turned
+on the project's own asset.
+
+Searched first, as the cheaper option: **no 3D model of Jolly exists**.
+The character is from September 2026 and the model sites return generic
+mascots. The web images are all editorial and all compromised for
+image-to-3D — a BBC shot carries an added cracked-glass overlay, the
+Gizmodo render is a tight crop, the Mashable photo has hands and a prop in
+frame. The usable reference was a clean studio shot of the plush: one
+subject, plain background, full body, neutral pose.
+
+Pipeline, all local on the 4070 Ti, zero credits: ComfyUI's own
+`3d_pixal3d_trellis2_image_to_model` template — birefnet background
+removal, MoGe geometry, Pixal3D shape (Trellis 2 is wired as the
+alternative), voxel → mesh → remesh → decimate → unwrap, then texture,
+normal and AO bakes applied to the mesh, out as GLB.
+
+Two tools came out of it, both in `tools/`:
+
+- **`comfy-frontend-to-api.py`** — ComfyUI ships templates in editor
+  format; `/prompt` only takes API format, so a template cannot be
+  submitted as-is. This walks the links, pairs widget values with their
+  schema names, resolves reroutes and bypassed nodes, and prunes to the
+  subgraph feeding the outputs asked for (66 nodes → 55). Three things
+  bit, each found by a rejected submission:
+  - current ComfyUI writes a combo as the literal type `"COMBO"`, not as
+    a list of choices;
+  - the scalar types are *both* widget types and connection types, so
+    "is it an output type somewhere" cannot decide on its own — the rule
+    is scalar-or-combo first, then "nothing emits this type" to catch
+    editor-only types like `LOAD_3D`;
+  - the editor draws a `control_after_generate` widget after every seed
+    and stores its value, but the backend schema has no such input, so
+    every sampler setting after the seed shifted by one and the graph
+    came back with `scheduler: 'euler'`.
+  Known limit: a dynamic combo (`COMFY_DYNAMICCOMBO_V3`) stores its
+  sub-widgets inline and cannot be placed positionally. `RemeshMesh` is
+  the one node here that has one, and `make-mascot.py` sets it by hand.
+- **`make-mascot.py`** — upload, submit, wait, pull the GLB, in one
+  command, so the asset is reproducible rather than an unexplained binary.
+  Defaults target a 170 px on-screen mascot, not the template's hero
+  model: the first run at the template's own settings produced a **41 MB**
+  GLB (700k faces, 4096 textures).
+
+In the app, `src/mascot.ts` loads the GLB with `GLTFLoader`, normalises it
+to a known height and stands it on y=0 so the body rotates about its
+**feet** — pivoting about the centre made every lean read as the character
+tipping over in mid-air. If the GLB is missing it warns and renders
+nothing, rather than breaking the page.
+
+What the generated mesh costs: it is one piece, so there is no head to
+turn on its own and no blinking — the eyes and mouth are in the texture.
+The whole figure turns instead, which reads correctly at this size, and
+the state shows through posture: it leans in while listening, leans
+forward head-down over the work, hops once on success.

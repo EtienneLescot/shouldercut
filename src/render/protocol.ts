@@ -73,7 +73,8 @@ export type WorkerCommand =
   | { type: 'clearEffects' }
   | { type: 'setMaskTrack'; track: MaskTrackData }
   | { type: 'clearMaskTrack' }
-  | { type: 'captureFrame'; requestId: string };
+  | { type: 'captureFrame'; requestId: string }
+  | { type: 'exportRange'; requestId: string; start: number; end: number; bitrate: number };
 
 export type PlayerPhase =
   | 'starting'
@@ -128,8 +129,20 @@ export interface FrameCaptureResult {
   png: ArrayBuffer | null;
 }
 
+/** Offline render of the effect chain over a time range, muxed to MP4. */
+export interface ExportRenderResult {
+  requestId: string;
+  ok: boolean;
+  message: string;
+  frames: number;
+  width: number;
+  height: number;
+  mp4: ArrayBuffer | null;
+}
+
 export type WorkerEvent =
   | { type: 'state'; state: PlayerState }
   | { type: 'error'; message: string }
   | { type: 'effectResult'; result: EffectCompileResult }
-  | { type: 'frameResult'; result: FrameCaptureResult };
+  | { type: 'frameResult'; result: FrameCaptureResult }
+  | { type: 'exportResult'; result: ExportRenderResult };

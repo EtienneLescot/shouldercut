@@ -4,10 +4,14 @@ Meta Global AI Developer Hackathon, Indie Developer track.
 Building period: Oct 27 – Nov 4, 2026. Submission deadline: Nov 4, 21:00 ET.
 Problem statement: **Build for Your World**.
 
-Working title: ShoulderCut. Rename allowed until Nov 2, no code depends on it.
-This document is a planning artifact written on kickoff day (Oct 26). It is
-kept outside the submitted repository until Oct 27, then committed as the
-first document of the new public repo.
+Name frozen Nov 2: ShoulderCut.
+
+This document started as a planning artifact written on kickoff day (Oct 26)
+and is now kept current with what is actually built. Revised Nov 2, 2026:
+sections 0, 2, 5, 7, 8, 10 and 13 describe the shipped system, not the plan.
+Where the build diverged from the plan, the divergence is recorded in §13
+rather than quietly overwritten. `docs/spikes.md` holds the dated
+verification notes, the README holds the feature list shown in the demo.
 
 ## 0. Compliance frame (non-negotiable)
 
@@ -20,7 +24,7 @@ first document of the new public repo.
   |---|---|---|
   | openscreen | Native GPU compositor (Rust, D3D11VA/Metal/wgpu), code-first renderer interfaces, decode/encode pipeline | WebGPU/WGSL render worker, free-form FX code interface, WebCodecs pipeline (§3, §5) |
   | muse-desktop | Coding-agent runtime, Muse Code integration, MCP hosting | Agent service and tool plumbing (§5, §7), MCP server |
-  | stimm | Optimistic voice UI: fast voice agent + deep supervisor on LiveKit | Imported, see below; only the supervisor and adapters are written here |
+  | stimm | Optimistic voice UI: fast voice agent + deep supervisor on LiveKit | Not imported in the end (see below). The know-how shaped the push-to-talk path and the optimistic working preview; no code and no package from it ships |
 
   Reading those repos for concepts, interfaces, and known pitfalls is
   allowed; copying code out of them is not. Agents get this spec plus
@@ -29,14 +33,14 @@ first document of the new public repo.
   from scratch while reusing know-how is compliant with "new work only";
   importing own previously published MIT packages is allowed if properly
   declared (confirmed by Cerebral Valley staff).
-- **stimm is imported**, as that declared pre-existing MIT dependency:
-  Python `stimm` (pin the version, current line 0.1.x) and TypeScript
-  `@stimm/protocol`. It is listed under "Pre-existing dependencies" in
-  the README and never presented or demoed as hackathon work. What is
-  built during the event around it: the editing Supervisor and the
-  stimm ↔ edit-graph tool bridge. No STT adapter is needed: LiveKit
-  ships an official Meta plugin (`livekit-agents[meta]`,
-  `meta.STT`, verified Oct 26, §13).
+- **stimm is not imported after all** (decided Oct 31, §13). The voice
+  loop ships as browser push-to-talk straight into the existing
+  supervisor path, so the product carries no first-party pre-existing
+  dependency at all: every line of ShoulderCut is event work, and the
+  README's "Pre-existing dependencies" list is third-party only. The
+  plan of record until Oct 31 was to import the author's published MIT
+  `stimm` package for a LiveKit dual-agent voice runtime; that option
+  was declared compliant by the organizers and is simply unused.
 - Third-party open-source libraries are allowed and listed in the README
   under "Pre-existing dependencies" with name, purpose, and license.
 - README gets a "Built during the hackathon" section listing every feature
@@ -64,9 +68,11 @@ correct loop is the product. There is no effects catalog for it to pick
 from: the agent writes free-form WGSL through MCP shader tools, the host
 compiles it live and returns compiler errors for iteration (contract in
 `docs/fx-interface.md`, POC verified Oct 27 with a Muse harness).
-Voice later runs on stimm's dual-agent pattern (imported, §0): a fast
-voice agent acknowledges and speaks immediately while the deep agent
-reasons and issues edit/shader operations in parallel.
+Voice runs as push-to-talk into the same agent (§2.3, §13): hold the
+button, speak, release, and the transcript enters the supervisor exactly
+as a typed command would. What the planned dual-agent voice runtime was
+there to provide — "something is happening" while the deep agent works —
+is provided visually instead, by the optimistic working preview.
 
 **Users.** Solo creators, streamers, and indie filmmakers who know the
 result they want but lose hours in a traditional NLE timeline. They have
@@ -104,8 +110,8 @@ P0 is therefore the interface quality, not a list of effects:
   the preview.
 - `maskAt()` is driven by SAM 3.1 mask tracks (next integration after
   the Oct 27 POC, where it returns 1.0).
-- Chat first (Muse native harness over MCP, POC done Oct 27),
-  then voice through stimm with the same tool surface.
+- Chat first (Muse Code harness over MCP, POC done Oct 27), then voice
+  on the same tool surface (push-to-talk, §2.3).
 
 Demo prompts will showcase range, not features: an explosion at the
 center, an object isolation using a SAM mask, and a parallax push are
@@ -113,9 +119,38 @@ things the agent writes on request, not entries shipped in a catalog.
 Temporal history textures and compute passes extend this same contract
 later; they are host capabilities, still not catalog effects.
 
-P1: backdrop plates generated with Muse Image as shader inputs,
-9:16 / 1:1 reframing expressed through the same code interface.
-P2: music-bed ducking.
+Three host capabilities extend this same contract and shipped on top of
+it. None of them is a catalog of effects either; each is a wider space the
+agent writes code or parameters into:
+
+- **True 3D and GPU particles.** Background/foreground world planes
+  (`layerUv`, `foreAt`, `backAt`), a host-animated virtual camera
+  (`camera` move, `target`, `roll`), raymarching helpers (`rayDir`,
+  `worldToUv`, SDF/lighting stdlib), and host-simulated compute
+  particles (`particleInit`/`particleUpdate` plus billboard sprites in
+  the same world space). Parallax push-ins, volumetrics and sparks are
+  written per request, not selected.
+- **Generative video** (`docs/generative-video-spec.md`,
+  `docs/generative-video-architecture.md`). Where a shader cannot reach
+  — replacing a character, repainting a garment, inventing a shot — the
+  agent spends a generation job instead: `generate_shot`, `edit_segment`,
+  `get_generation_job`, async with an optimistic working preview
+  (`show_working_preview`). Backends: a local stub, hosted fal
+  (`vace`, `wan-animate`, `kling-o3`, `recast`), and a local ComfyUI
+  repertoire of tested workflows (`scail`, `scail-animate`, `vace-local`)
+  in `server/comfy-workflows/`. Plans go through the technique registry
+  (`server/video-techniques.json`, 10 researched techniques) via
+  `list_video_techniques`, `list_comfy_workflows` and
+  `recommend_video_workflow` before any spend.
+- **Editing craft on demand.** `get_editing_craft` serves one small
+  topic at a time (colour, camera, beat, captions) from
+  `docs/editing-craft.md`, loaded only when a request touches taste, so
+  craft never taxes ordinary editing.
+
+P1 (not built): backdrop plates generated with Muse Image as shader
+inputs, 9:16 / 1:1 reframing expressed through the code interface rather
+than export presets.
+P2 (not built): music-bed ducking.
 
 ### 2.2 Editing (full, but agent-first)
 
@@ -138,12 +173,30 @@ P2: beat-cut on music, multi-track audio.
 
 ### 2.3 Interface (thin by design)
 
-One screen: large preview canvas, clip strip with a minimal timeline
-readout, live voice (browser microphone in a LiveKit room via stimm,
-push-to-mute, spoken confirmations), transcript and agent reply line,
-before/after hold-to-compare, undo/redo, export. Chat input mirrors voice
-for noisy rooms and for the demo backup path. No settings pages, no
-effect browser panels: effects are requested, not browsed.
+One screen, and almost nothing on it: the video fills the frame, a single
+Talk button sits under it, and Muse — Meta's mascot, rebuilt as a small
+Three.js figure (§0: the character is Meta's, the model is ours) — waits
+in the corner, turning its head while it has nothing to do. Everything else
+(project, playback, transcript, tracking, shaders, export) lives in a
+drawer behind one Controls button, closed by default.
+
+The whole interface runs off one state — idle, listening, thinking, done,
+error — set on the document and read by CSS, so feedback costs no
+per-frame JavaScript: the accent colour shifts, the button breathes then
+pulses with the live microphone envelope, a hairline travels around the
+frame while Muse writes WGSL, and a light sweep crosses the picture when a
+command lands. The mascot reads the same state: it scans the room when
+idle, locks on while listening with its cheeks warming to the mic level,
+and drops its head over the work with narrowed eyes while it edits.
+
+Voice is push-to-talk, not an always-open room (§13): hold Talk, speak,
+release; the browser records with `MediaRecorder`, the bridge transcribes
+with Muse Voice Transcribe and feeds the text into the same supervisor
+path as a typed command, with full tool parity. The agent answers in the
+reply line and speaks its first sentence back through the browser's own
+speech synthesis. Chat input mirrors voice for
+noisy rooms and as the demo backup path. No settings pages, no effect
+browser panels: effects are requested, not browsed.
 
 ## 3. Rendering architecture: copy budget
 
@@ -260,25 +313,23 @@ let the user re-prompt a lost track by clicking the object.
 live file transcription PASS Oct 27** (`POST /v1/asr/transcribe`,
 3.6 s command transcribed exactly in 1.62 s, one turn with
 `startMs`/`endMs`; word-level timestamps do not exist in this API).
-Still to run live: the realtime stimm loop and Muse Spark tool-calling
-validity (method below). Verified: `stimm` +
-`livekit-agents[meta]` import cleanly together; the official LiveKit
+**Closed Oct 31 on the fallback, deliberately** (§13). The realtime
+stimm/LiveKit loop and Muse Spark tool-calling were never run live,
+because the spike's own fallback — "push-to-talk with post-stop
+transcription; chat input as the primary demo path" — was chosen on its
+merits rather than after a failure. The file-transcription leg it needs
+is the leg that passed. What was verified and is now unused: `stimm` +
+`livekit-agents[meta]` import cleanly together, and the official LiveKit
 Meta plugin exposes `meta.STT` (model `muse-voice-transcribe-1.0`,
 realtime WebSocket, PCM16 24 kHz, cumulative interim transcripts,
 server-side endpointing, `language_bias` including French, 60 min
-session cap). No adapter to write. Remaining questions: caption
-timestamp quality (file transcription path), and Muse Spark
-tool-calling validity as stimm Supervisor.
-Method (Oct 27): run imported stimm locally (LiveKit dev server,
-uv-managed project-local `.venv`), transcribe a 60 s clip (caption
-timing error vs. spoken words), speak 20 commands in French and English
-through the stimm loop into Muse Spark with the tool schemas of §7,
-score valid-op rate and perceived latency (fast voice agent
-acknowledgement vs. effect actually applied).
-Pass: effect applied under ~2 s perceived, ≥ 18/20 commands become valid
-operations without repair.
-Fallback: push-to-talk with post-stop transcription; chat input as the
-primary demo path; stricter op validation with one repair round trip.
+session cap).
+
+Still unmeasured, and the one number worth having before the demo: the
+valid-op rate of spoken commands. The 20-command FR/EN set of §12 has
+not been run as a scored eval against the shipped push-to-talk path.
+Original pass bar, kept as the bar: effect applied under ~2 s perceived,
+≥ 18/20 commands become valid operations without repair.
 
 ## 5. System architecture
 
@@ -292,8 +343,7 @@ or UI — only the execution host of the renderer:
 3. Same web app inside a thin local shell for filesystem access and a
    native encoder, renderer unchanged.
 
-Components, all written during the event except the imported stimm
-runtime (declared, §0):
+Components, all written during the event (no first-party import, §0):
 
 - **Web app** (Vite). UI shell, preview canvas, mic capture, chat.
 - **Render worker**. Owns the `OffscreenCanvas`, WebGPU device, the
@@ -301,30 +351,41 @@ runtime (declared, §0):
   compilation, ping-pong textures, mask textures, and later temporal
   history buffers as host capabilities. Demux/decode with WebCodecs;
   MP4 mux on export. Third-party demux/mux helpers allowed if declared
-  (Mediabunny, in use).
+  (Mediabunny, in use). The worker is also the only path that bakes
+  effects into a file: `exportRange` walks a clip frame by frame through
+  the same pass chain as the preview and muxes the result, because the
+  server's ffmpeg only ever sees untouched sources.
 - **Edit graph** (§6). Single source of truth; the renderer and the agent
   both consume it. Undo is graph history, rendering is a pure function of
   (graph, time).
-- **Agent harness**. POC (Oct 27): the local bridge runs Muse Code
-  CLI (`muse exec`) in an empty agent workspace with only the
-  `shouldercut-fx` MCP tools instructed for shader work. The same MCP
-  surface is the product contract; Muse Spark as stimm Supervisor can
-  host it next without changing the shader interface. The agent emits
-  WGSL and validated edit operations; it never touches pixels directly.
-  Runtime/MCP hosting concepts come from muse-desktop know-how,
-  rewritten here.
+- **Agent harness (the Supervisor)**. The local bridge runs Muse Code
+  CLI (`muse exec`, resolved from the local install) in an empty agent
+  workspace, with the `shouldercut-fx` MCP server as its whole tool
+  surface and a system instruction covering the shader contract, the
+  craft loader and the generation budget rules. One harness serves chat,
+  push-to-talk voice and the generation planner: the MCP surface is the
+  product contract, so nothing above it changes when the input changes.
+  The agent emits WGSL and validated edit operations; it never touches
+  pixels directly. Muse Spark was the planned Supervisor host (§13);
+  Muse Code fills that role in the shipped build. Runtime/MCP hosting
+  concepts come from muse-desktop know-how, rewritten here.
 - **SAM adapter**. Hides the SAM 3.1 API behind `trackObject(clipRef,
   prompt, timeRange) → MaskTrack`. Mask tracks are cached client-side
   (OPFS/IndexedDB), keyed by clip hash + prompt + range.
-- **Voice service (imported stimm)**. Python host app (new code,
-  uv-managed project-local `.venv`) running the stimm `VoiceAgent` on
-  LiveKit: VAD → STT via the official LiveKit Meta plugin
-  (`livekit-agents[meta]`, `meta.STT`, Muse Voice Transcribe) → fast
-  acknowledgement → TTS spoken confirmation; `@stimm/protocol` connects
-  it to the Supervisor. The web app joins the LiveKit room for mic and
-  audio out. Clip audio for captions and silence cross-check uses Muse
-  Voice Transcribe file transcription via the proxy ($0.18 per audio
-  hour, same price as streaming).
+- **Voice path (push-to-talk)**. No separate service and no LiveKit
+  room (§13). The web app records the held Talk button with
+  `MediaRecorder` and posts the clip to `/api/voice/command`; the bridge
+  transcribes it with Muse Voice Transcribe
+  (`muse-voice-transcribe-1.0`) and runs the transcript through the same
+  supervisor call as a typed command, returning both the transcript and
+  the agent's reply. Clip audio for captions and the silence
+  cross-check uses the same file-transcription endpoint via the proxy
+  ($0.18 per audio hour).
+- **Generation service**. Async job manager for generative video
+  (`server/gen-video.ts`): segment extraction and ControlNet-style edge
+  control via ffmpeg, a stub backend for offline work, a hosted fal
+  backend, and a local ComfyUI backend driving the tested workflow
+  repertoire. Finished jobs join the edit graph as clips automatically.
 - **Proxy** (small Node service). Holds Meta API keys, enforces per-session
   budgets, logs credit spend, streams responses when supported.
 - **MCP server (`shouldercut-fx`, P0)**. Node/stdio MCP server exposing
@@ -335,45 +396,108 @@ runtime (declared, §0):
 
 ## 6. Edit graph and data model
 
-A project is one JSON document, versioned, exportable, diffable:
+As built (`server/edit-graph.ts`), the project is one versioned JSON
+document holding the *cut*, while the *look* lives in the render worker:
 
 ```
-Project   { version, clips: Clip[], settings }
-Clip      { id, sourceRef, sourceHash, in, out, effects: Effect[], captionsRef }
-Effect    { id, name, code: WGSL source, params: vec4, enabled, range, maskTrackId? }
-MaskTrack { id, clipId, prompt, model: "sam-3.1", frames: MaskFrameRef[] }
-MaskFrame = RLE-encoded single-channel mask + bounding box, in OPFS
+Project    { version: 1, clips: ProjectClip[] }
+ProjectClip{ id, name, hash, duration, in, out, captions: CaptionCue[], captionsEnabled }
+CaptionCue { start, end, text }
+```
+
+Clip bytes are stored on disk keyed by content hash (`server/clip-store`),
+generation output in `server/gen-output`; the document references them by
+hash, so a project re-links its sources.
+
+Shader state is held separately, in the render worker and addressed by
+effect id over the MCP surface:
+
+```
+ShaderEffectDefinition { id, name, kind: 'fragment'|'particles', code, params[16],
+                         enabled, range, camera?, particles?, particleCode? }
+MaskTrackData          { frames: MaskTrackFrameData[] }  // SAM 3.1, decoded server-side
 ```
 
 Rules:
-- Effects apply in list order. The renderer compiles the enabled list for
-  the current frame into a pass chain; parameter changes recompile
-  uniforms, not pipelines, wherever possible.
-- Every user-visible change is an operation on this document and appends
-  to an undo stack with a human label ("shader 'explosion' on clip 2").
-- Masks are stored at analysis resolution (≤ 540p), upsampled in-shader
-  with edge feather. A mask track may be keyframed (every N frames) with
-  GPU-side interpolation if Spike S2 lands on the fallback.
-- The document is the only thing the agent can change. Project file =
-  edit graph JSON + mask cache index; sources are re-linked by hash.
+- Effects apply in list order as one pass chain over the decoded frame.
+  Parameter changes update uniforms, not pipelines.
+- Masks are decoded server-side from the SAM 3.1 stream and streamed into
+  the worker behind `maskAt()`; a clip is tracked at most once per
+  (hash, prompt).
+- Every edit-graph change commits a pre-op snapshot to an undo stack with
+  a human label, capped at 100 entries. `undo`/`redo` restore snapshots
+  of the whole document.
+- **Known divergence from the plan:** effects are *not* in the document,
+  so `undo` does not cover shader changes. "Undo that" after an effect
+  resolves to `remove_shader_effect` instead, which the supervisor knows;
+  the two histories are separate. Unifying them would mean moving effect
+  state into the document and is not worth doing before the submission.
+- The agent can only change the document and the effect list. It never
+  touches pixels.
 
 ## 7. Agent tools (MCP contract)
 
-The agent sees exactly these tools. Names and fields are the contract;
-validation rejects anything else and feeds the error back once.
+The agent sees exactly these tools, served by the `shouldercut-fx` MCP
+server (`server/shouldercut-mcp.mjs`). Names and fields are the contract;
+validation rejects anything else and feeds the error back once. 31 tools
+in six groups:
+
+**Reference (pulled on demand, never preloaded)**
+
+| Tool | Inputs | Purpose |
+|---|---|---|
+| `get_shader_interface` | — | serves `docs/fx-interface.md`, the WGSL contract |
+| `get_editing_craft` | topic (`colour`, `camera`, `beat`, `captions`) | one craft topic from `docs/editing-craft.md` |
+
+**Shaders**
 
 | Tool | Inputs | Effect on graph |
 |---|---|---|
-| `apply_shader_effect` | id, name, WGSL code (`docs/fx-interface.md`), params, range | compile live; append/replace Effect only on success |
+| `validate_shader` | code, kind | dry-run compile; no graph change |
+| `apply_shader_effect` | id, name, WGSL code, params (16 free), range, kind (`fragment`/`particles`), camera, particles config, particleCode | compile live; append/replace Effect only on success |
 | `list_shader_effects` / `remove_shader_effect` / `clear_shader_effects` | effectId where relevant | inspect or delete shader Effects |
+
+**Preview and observation**
+
+| Tool | Inputs | Purpose |
+|---|---|---|
 | `get_video_state`, `seek_video`, `set_playing` | time / boolean where relevant | observe and position the preview |
-| `track_object` | clipId, text prompt or click point, range | create MaskTrack via SAM |
+| `describe_frame` | time | returns the current frame as a PNG image to the agent |
+| `track_object` | text prompt, range | create a MaskTrack via SAM 3.1 behind `maskAt()` |
+
+**Edit graph**
+
+| Tool | Inputs | Effect on graph |
+|---|---|---|
+| `get_project` | — | read the whole document |
 | `trim_clip` / `split_clip` / `move_clip` / `delete_clip` | clipId, times or index | timeline structure |
-| `remove_silences` | clipId or project, threshold | cut ranges from analysis |
-| `set_captions` | clipId, style, on/off | caption layer + SRT data |
+| `remove_silences` | clipId or project, threshold | cut ranges from ffmpeg `silencedetect` |
+| `set_captions` | clipId, cues, on/off | caption layer + SRT data |
+| `transcribe_captions` | clipId | Muse Voice Transcribe → caption cues split by text length |
 | `undo` / `redo` | steps (default 1) | graph history |
-| `export` | preset (`1080p`, `vertical-1080x1920`, `square`) | render + mux |
-| `describe_frame` | clipId, time | read-only visual context for the agent |
+| `export_video` | preset (`1080p`, `vertical`, `square`) | renders the loaded clip's shader chain in the worker, muxes it with the source audio, applies the preset and burns in captions |
+
+**Generative video** (spec: `docs/generative-video-spec.md`)
+
+| Tool | Inputs | Effect on graph |
+|---|---|---|
+| `generate_shot` | prompt, duration | async job; finished shot joins the graph as a clip |
+| `edit_segment` | prompt, range, backend (`vace`, `wan-animate`, `kling-o3`, `recast`, `scail`, `scail-animate`, `vace-local`), refImageUrl | async segment edit; same |
+| `get_generation_job` | jobId | poll status, cost and output |
+| `show_working_preview` / `clear_working_preview` | treatment | optimistic SAM-subject preview while a job runs |
+
+**Planning before spend**
+
+| Tool | Inputs | Purpose |
+|---|---|---|
+| `list_video_techniques` | filter | the 10 researched techniques, with guidance channels, backends and prices |
+| `list_comfy_workflows` | — | the tested local ComfyUI repertoire with its fixed settings |
+| `recommend_video_workflow` | intent description | ranked technique + backend for the request |
+
+The supervisor must plan every generative request through the last group
+before spending: shader first, then the cheapest technique that can do the
+job. `recommend_video_workflow` refuses to improvise a graph that the
+repertoire does not cover; it says so instead.
 
 Conversation state kept server-side per session: current clip, last
 effect touched, last object tracked, so "more", "same on the other clip",
@@ -386,11 +510,12 @@ instead of guessing.
 
 | Meta tool | Role in product | Beyond-basic evidence |
 |---|---|---|
-| SAM 3.1 | Object masks + boxes behind `maskAt()` for agent shaders | Masks feed free-form shaders, not a viewer; the agent can invent tracked parallax, trails, isolation, or anything else from the same mask input |
-| Muse Spark | Planned Supervisor host for the same MCP tool surface | Multimodal grounding: sampled frames resolve spoken references into SAM prompts; multi-step edits in one command |
-| Muse Voice Transcribe | Voice commands (STT inside imported stimm) + captions + silence detection | One model serves control input and content analysis; stimm itself is pre-existing plumbing, declared and not scored |
-| Muse Code | Builds the project and is the POC shader-agent harness (`muse exec` + MCP) | The Oct 27 explosion POC was written by Muse through `shouldercut-fx` |
-| Muse Image (P1) | Generated plates as future shader inputs | Creative bonus angle |
+| SAM 3.1 | Object masks + boxes behind `maskAt()` for agent shaders; subject isolation for the optimistic working preview; subject detection inside the local SCAIL-2 workflows | Masks feed free-form shaders, not a viewer; the agent invents tracked parallax, trails and isolation from the same mask input, and the mask also sizes the reference character for generation |
+| Muse Code | The shipped Supervisor: `muse exec` hosting the `shouldercut-fx` MCP server, writing WGSL and issuing edit operations live — and the agent that built the project | Not a code-completion demo: the agent is the product's runtime brain, iterating on real compiler errors through MCP |
+| Muse Voice Transcribe | Push-to-talk voice commands, captions, and the silence-removal cross-check | One model serves control input and content analysis on the same endpoint |
+| SCAIL-2 / open weights (local) | Character replacement and animation, and VACE masked inpainting, run locally in ComfyUI as `edit_segment` backends | Open-weight models driven from the same agent tool surface as the hosted ones, with a tested-settings repertoire instead of improvised graphs — the Best Open-Weight Build angle |
+| Muse Spark | Not used (§13). Muse Code fills the Supervisor role | — |
+| Muse Image | Not built: generated plates as shader inputs stay P1 | — |
 
 Budgets (hard rules, enforced in the proxy): spend limit on the API
 account set before day 1; mask tracks and transcripts cached so a clip is
@@ -399,9 +524,10 @@ capped per session; a worklog of credits spent per feature kept in
 `docs/costs.md`. Official prices make credits a non-issue at demo scale
 (SAM video $0.20/1,000 frames, Voice Transcribe $0.18/audio hour, Muse
 Image $0.01/image); the spend limit guards against runaway loops, not
-normal use. Bonus tracks targeted, in order: Best Agentic Use-Case,
-Most Viral (X post of the demo), Best Creative Build (only if Muse Image
-lands).
+normal use. Bonus tracks targeted, in order: Best Agentic Use-Case, Best
+Open-Weight Build (local SCAIL-2 / VACE behind `edit_segment`), Most
+Viral (X post of the demo). Best Creative Build is out: it was tied to
+Muse Image, which is not built.
 
 ## 9. Performance budgets
 
@@ -424,21 +550,24 @@ on Billing and that the spend limit is set; join Discord channels,
 attend Agents 101 (12:00 ET), request partner credits (Baseten/Modal)
 only if a spike shows a use for them.
 
-| Day | Build goal | Demoable at day end |
+Revised Nov 2 with what actually landed. The plan held for the shader
+core and slipped on voice, which moved to the last build day once the
+generative-video detour proved worth the time (§13).
+
+| Day | Planned | Actual |
 |---|---|---|
-| Oct 27 | Spikes S1–S3, repo + this spec committed, proxy skeleton | Spike verdicts written in `docs/spikes.md`, architecture frozen |
-| Oct 28 | Render worker + free-form FX interface hardened (done early Oct 27: decode/seek, dynamic WGSL chain, MCP chat POC) | Agent writes and compiles an unplanned shader live from chat |
-| Oct 29 | SAM adapter + mask cache wired behind `maskAt()` | "Blur the background" works end-to-end: agent tracks, then writes its shader |
-| Oct 30 | stimm voice service (import + LiveKit Meta STT plugin) + Supervisor host + tool validation; undo | Same commands by voice, spoken confirmations, corrections ("more", "undo") |
-| Oct 31 | FX interface depth: temporal history input, pass-cost feedback, multi-clip effect placement; P0 checkpoint | **Shader layer complete or cut P1 (gate)** |
-| Nov 1 | Editing P0: trim/split/move, silence removal, captions + SRT | A 3-clip project edited by voice alone |
-| Nov 2 | Export pipeline hardened (HW encode, mux, presets); P1 if green (`reframe`, MCP server) | Exported MP4 matches preview; name frozen |
-| Nov 3 | Feature freeze. Demo footage shot, demo script rehearsed, README "Built during the hackathon", live deployment | Full rehearsal recorded as dry run |
-| Nov 4 | Record final 3-min video, submit by 15:00 ET, post demo on X (Most Viral), last office hours if blocked | **Submitted**, 6 h before deadline |
+| Oct 27 | Spikes S1–S3, repo + spec, proxy skeleton | **Done, and more**: spikes green in `docs/spikes.md`, render worker (Mediabunny demux, WebCodecs decode, frame-accurate seek, WebGPU present), free-form FX interface, MCP chat POC, SAM masks behind `maskAt()`, true-3D layered space — four planned days in one |
+| Oct 28 | Render worker + FX interface hardened | **Done**: FX interface v2, `validate_shader`, injected WGSL stdlib, 16 free params, temporal history feedback |
+| Oct 29 | SAM adapter + mask cache | **Done Oct 27**; day spent on the video technique registry and the generative-video POC spec instead |
+| Oct 30 | stimm voice service + Supervisor + undo | **Diverged**: Supervisor was already running since Oct 27. Day spent on generative video (async jobs, fal backend, segment + edge control, optimistic working preview) and the first tested ComfyUI workflow (SCAIL-2 character replacement). Voice deferred |
+| Oct 31 | FX depth, P0 checkpoint gate | **Done**: raymarching helpers, GPU compute particles, `get_editing_craft`. Gate call: keep the shader layer, drop the stimm/LiveKit voice runtime for push-to-talk (§13) |
+| Nov 1 | Editing P0: trim/split/move, silences, captions + SRT | **Done, plus export**: edit graph and all operations, caption cues in the preview, SRT, MP4 export with presets, `describe_frame`, `transcribe_captions`, SCAIL-2 Animation mode and local VACE |
+| Nov 2 | Export hardened; name frozen | Export landed Nov 1. Today: name frozen (ShoulderCut), this spec brought current, README made accurate, LICENSE + `docs/costs.md` added, demo path run end-to-end |
+| Nov 3 | Feature freeze, demo footage, rehearsal, deployment | Pending |
+| Nov 4 | Record 3-min video, submit by 15:00 ET, X post | Pending |
 
 Standing rules: every day ends with the demo path run once end-to-end;
-a red demo path stops new features until green. Workshops Oct 28 and
-Oct 30 are watched only for content touching open questions (§13).
+a red demo path stops new features until green.
 
 ## 11. Cut order (when time runs out, cut in this order)
 
@@ -448,9 +577,30 @@ the FX contract. 3. Filler-word removal, dissolve, caption variants.
 interface + MCP compile loop, SAM `maskAt()`, voice loop, undo, export,
 captions.
 
+Actually cut as of Nov 2: Muse Image plates (1), filler-word removal,
+dissolve and caption variants (3), reframe beyond the three export
+presets (4), and P2 music-bed ducking. Item 2 was *not* cut — temporal
+history and compute particles both shipped. Nothing on the never-cut list
+was cut, though the voice loop ships as push-to-talk rather than an open
+room (§13).
+
 ## 12. Testing and demo
 
-Tests:
+Test status as of Nov 2: **one automated test**, `npm test`
+(`tools/test-export.ts`), covering the export path — that a sub-1080p
+source fills the 1080p preset rather than sitting letterboxed, and that
+a clip rendered by the browser reaches the file with its audio intact.
+Both assertions were mutation-checked against the bugs they describe. It
+runs on node's native type stripping with no framework and no new
+dependency.
+
+Everything else is still unautomated: the perf harness (`tools/bench`)
+and the dated manual verifications in `docs/spikes.md` are what exists,
+and every other feature was accepted by running the demo path by hand.
+The edit-graph operations of §7 are the next cheapest to cover and the
+ones a judge is most likely to break live.
+
+Tests (planned):
 - Edit-graph operations: unit tests per tool in §7, including invalid-op
   rejection and undo round-trips.
 - Shader interface tests: test-authored WGSL snippets (never shipped as
@@ -476,11 +626,12 @@ Demo (3 minutes, shows only hackathon-built features):
    on the architecture (agents write WGSL live over SAM masks through
    MCP; zero CPU pixel copy).
 
-Submission checklist: public repo link, live URL, video link, team =
-solo (representative = author), README with "Built during the hackathon"
-and "Pre-existing dependencies" (stimm pinned version first in that
-list), LICENSE kept, Discord ruling screenshots archived with the
-project notes, X post link added after submission.
+Submission checklist: public repo link, live URL (or the local-run
+decision of §13), video link, team = solo (representative = author),
+README with "Built during the hackathon" and a third-party-only
+"Pre-existing dependencies" list (no first-party import, §0), LICENSE,
+`docs/costs.md` credit worklog, Discord ruling screenshots archived with
+the project notes, X post link added after submission.
 
 ## 13. Risks and open questions
 
@@ -493,12 +644,47 @@ of "full editing" eating FX time (cut order §11).
 
 Resolved by documentation (Oct 26): SAM 3.1 contract and pricing (§4
 S2); official LiveKit Meta STT plugin exists, French supported (§4 S3).
-To resolve at workshops / Discord office hours:
+
+### Deviations from the plan, and why
+
+- **No stimm, no LiveKit room: voice is push-to-talk** (decided Oct 31).
+  The dual-agent pattern buys a spoken acknowledgement while the deep
+  agent works. By Oct 31 the Supervisor had been answering chat commands
+  for four days and the optimistic *visual* preview
+  (`show_working_preview`) already covered the "something is happening"
+  job that the fast voice agent was there to do — and it covers it
+  better, since the user is looking at the preview, not listening. A
+  LiveKit room plus a Python voice host plus a TTS leg was the largest
+  remaining piece of plumbing in the plan and the one furthest from the
+  product's point. Push-to-talk reaches the same supervisor with the same
+  tool parity in roughly thirty lines. Cost: no Meta TTS voice (the
+  browser’s own speech synthesis speaks the confirmation instead), and a
+  held button instead of an open mic. Benefit beyond the time: the
+  submission carries no first-party pre-existing dependency at all
+  (§0). Reversible — nothing above the tool surface assumes the input
+  channel.
+- **Muse Code is the Supervisor, not Muse Spark.** The Muse Code harness
+  built for the Oct 27 shader POC already hosted MCP, iterated on real
+  WGSL compiler errors, and reads frames through `describe_frame`.
+  Swapping it for Spark would have re-solved a solved problem; the
+  multimodal grounding Spark was wanted for arrived as a tool instead.
+- **Generative video was not in the plan at all.** It took most of Oct
+  29–30 and two further days of workflow work, on the argument that
+  "make this person a robot" is the request a shader can never satisfy
+  and a judge is likely to ask for. It is the riskiest part of the demo
+  (local 6-minute renders) and is kept behind the optimistic preview and
+  the technique registry so it never blocks the live loop.
+
+### Open questions
+
 - Muse Voice Transcribe French quality on real footage (turn-level
   timestamps confirmed; word timestamps do not exist).
-- LiveKit self-hosted vs. Cloud for the judge-facing deployment.
-- Muse Spark tool-calling format and image input limits for frame
-  thumbnails.
+- Judge-facing deployment: the app needs the local bridge for `muse
+  exec`, ffmpeg and ComfyUI, so a purely static deployment cannot show
+  the agent loop. Decide Nov 3 between a hosted preview-only build plus
+  the video, and a local-run instruction in the README.
+- Whether to show a local ComfyUI generation live in the 3-minute video
+  or play a pre-rendered result and say so on screen.
 
 ## Appendix A. Sources for §3
 

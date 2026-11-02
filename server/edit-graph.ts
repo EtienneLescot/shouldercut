@@ -264,23 +264,44 @@ export class EditGraph {
     return { label: entry.label, project: this.get() };
   }
 
-  async exportMp4(preset: '1080p' | 'vertical-1080x1920' | 'square' = '1080p'): Promise<{ file: string; srtFile: string }> {
+  /**
+   * `renders` holds clips the browser already rendered through the shader
+   * chain, keyed by clip id and already trimmed to [in, out]. For those the
+   * video comes from the render and only the audio is taken from the source;
+   * every other clip is cut straight from its source file as before.
+   */
+  async exportMp4(
+    preset: '1080p' | 'vertical-1080x1920' | 'square' = '1080p',
+    renders: Map<string, Buffer> = new Map(),
+  ): Promise<{ file: string; srtFile: string }> {
     if (!this.project.clips.length) throw new Error('Project has no clips to export');
     const scale = preset === 'vertical-1080x1920'
       ? 'scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920'
       : preset === 'square'
         ? 'scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080'
-        : 'scale=min(1920\\,iw):min(1080\\,ih):force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2';
+        : 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2';
     const stamp = 'export-' + Date.now().toString(36);
     const segmentFiles: string[] = [];
     for (let i = 0; i < this.project.clips.length; i += 1) {
       const clip = this.project.clips[i];
       const segName = stamp + '-part' + i + '.mp4';
-      await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
-        '-ss', String(clip.in), '-i', clipFilePath(clip.hash), '-t', String(clip.out - clip.in),
-        '-vf', scale + ',format=yuv420p', '-r', '30',
-        '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2',
-        outPath(segName)]);
+      const rendered = renders.get(clip.id);
+      const encode = ['-vf', scale + ',format=yuv420p', '-r', '30',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2'];
+      if (rendered) {
+        const renderName = stamp + '-render' + i + '.mp4';
+        writeFileSync(outPath(renderName), rendered);
+        // Video from the render (already trimmed), audio from the source.
+        await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
+          '-i', outPath(renderName),
+          '-ss', String(clip.in), '-i', clipFilePath(clip.hash), '-t', String(clip.out - clip.in),
+          '-map', '0:v:0', '-map', '1:a:0?', ...encode, '-shortest',
+          outPath(segName)]);
+      } else {
+        await run('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error',
+          '-ss', String(clip.in), '-i', clipFilePath(clip.hash), '-t', String(clip.out - clip.in),
+          ...encode, outPath(segName)]);
+      }
       segmentFiles.push(segName);
     }
     const listName = stamp + '-list.txt';
