@@ -1,4 +1,5 @@
 import './style.css';
+import { createMascot, type MascotState } from './mascot';
 import type { PlayerState, ShaderEffectDefinition, WorkerCommand, WorkerEvent } from './render/protocol';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#preview');
@@ -38,7 +39,15 @@ const redoBtn = document.querySelector<HTMLButtonElement>('#redoBtn');
 const exportPreset = document.querySelector<HTMLSelectElement>('#exportPreset');
 const exportBtn = document.querySelector<HTMLButtonElement>('#exportBtn');
 const exportStatus = document.querySelector<HTMLElement>('#exportStatus');
+const museCanvas = document.querySelector<HTMLCanvasElement>('#museCanvas');
+const replyLine = document.querySelector<HTMLElement>('#replyLine');
+const drawer = document.querySelector<HTMLElement>('#drawer');
+const drawerToggle = document.querySelector<HTMLButtonElement>('#drawerToggle');
+const stageSweep = document.querySelector<HTMLElement>('.stage-sweep');
 
+if (!museCanvas || !replyLine || !drawer || !drawerToggle || !stageSweep) {
+  throw new Error('Missing application chrome');
+}
 if (!canvas || !fileInput || !playPauseBtn || !stepBackBtn || !stepForwardBtn || !seekBtn
   || !seekSeconds || !timeline || !statusText || !frameText || !mediaText || !decoderText
   || !errorText || !emptyState || !stage || !dropHint || !agentStatus || !chatLog || !chatForm
@@ -49,6 +58,34 @@ if (!canvas || !fileInput || !playPauseBtn || !stepBackBtn || !stepForwardBtn ||
 }
 
 let currentFile: File | null = null;
+
+// --- UI state: one string drives the button, the stage and the mascot ---
+const muse = createMascot(museCanvas);
+let doneTimer: ReturnType<typeof setTimeout> | null = null;
+
+function setUiState(next: MascotState): void {
+  if (document.body.dataset.ui === next) return;
+  document.body.dataset.ui = next;
+  muse.setState(next);
+  if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
+  if (next === 'done' || next === 'error') {
+    // A sweep across the frame is the "it landed" signal; then back to idle.
+    stageSweep!.classList.remove('run');
+    void stageSweep!.offsetWidth;
+    stageSweep!.classList.add('run');
+    doneTimer = setTimeout(() => setUiState('idle'), 1600);
+  }
+}
+
+function setMicLevel(level: number): void {
+  document.documentElement.style.setProperty('--level', level.toFixed(3));
+  muse.setLevel(level);
+}
+
+drawerToggle.addEventListener('click', () => {
+  const open = drawer!.classList.toggle('open');
+  drawerToggle!.setAttribute('aria-expanded', String(open));
+});
 
 // --- Edit graph project (SPEC §6): server is the source of truth ---
 interface CaptionCuePayload { start: number; end: number; text: string }
@@ -253,6 +290,15 @@ function addChatMessage(role: 'user' | 'agent', text: string): void {
   node.textContent = text;
   chatLog!.append(node);
   chatLog!.scrollTop = chatLog!.scrollHeight;
+  if (role === 'agent') {
+    // Muse's answer belongs over the video, not buried in a transcript.
+    // Muse opens with a bold "Fait" / "Terminé" header: useful in a
+    // transcript, noise on one line over the frame.
+    const line = text.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim()
+      .replace(/^(fait|terminé|done|ok)\s*[.:–-]?\s*/i, '');
+    replyLine!.textContent = line;
+    replyLine!.classList.toggle('show', line.length > 0);
+  }
 }
 function renderEffects(): void {
   document.body.dataset.effectCount = String(activeEffects.size);
@@ -607,6 +653,31 @@ trackForm.addEventListener('submit', (event) => {
 // lines under the video and the confirmation is spoken back.
 let mediaRecorder: MediaRecorder | null = null;
 let voiceChunks: Blob[] = [];
+const talkLabel = voiceBtn.querySelector<HTMLElement>('.talk-label');
+
+/** Feeds the mic envelope to the button rings and the mascot's antenna. */
+function meterStream(stream: MediaStream): () => void {
+  const audio = new AudioContext();
+  const analyser = audio.createAnalyser();
+  analyser.fftSize = 512;
+  audio.createMediaStreamSource(stream).connect(analyser);
+  const bins = new Uint8Array(analyser.frequencyBinCount);
+  let raf = 0;
+  const tick = (): void => {
+    raf = requestAnimationFrame(tick);
+    analyser.getByteTimeDomainData(bins);
+    let peak = 0;
+    for (const v of bins) peak = Math.max(peak, Math.abs(v - 128));
+    setMicLevel(Math.min(1, (peak / 128) * 2.2));
+  };
+  tick();
+  return () => {
+    cancelAnimationFrame(raf);
+    void audio.close();
+    setMicLevel(0);
+  };
+}
+
 voiceBtn.addEventListener('click', () => {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
@@ -615,11 +686,15 @@ voiceBtn.addEventListener('click', () => {
   void navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
     voiceChunks = [];
     mediaRecorder = new MediaRecorder(stream);
+    const stopMeter = meterStream(stream);
     send({ type: 'pause' });
+    setUiState('listening');
+    mediaRecorder.addEventListener('stop', () => stopMeter(), { once: true });
     mediaRecorder.addEventListener('dataavailable', (e) => { if (e.data.size) voiceChunks.push(e.data); });
     mediaRecorder.addEventListener('stop', () => {
       stream.getTracks().forEach((t) => t.stop());
-      voiceBtn.textContent = 'Talk';
+      if (talkLabel) talkLabel.textContent = 'Talk';
+      setUiState('thinking');
       const blob = new Blob(voiceChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
       voiceStatus.textContent = 'Transcribing...';
       void blob.arrayBuffer().then((buffer) => {
@@ -643,6 +718,7 @@ voiceBtn.addEventListener('click', () => {
         const reply = payload.reply || 'Done.';
         addChatMessage('agent', reply);
         voiceStatus.textContent = 'Heard: ' + (payload.transcript || '');
+        setUiState('done');
         const spoken = reply.split(/(?<=[.!?])\s/)[0].slice(0, 180);
         if (spoken && 'speechSynthesis' in window) {
           window.speechSynthesis.cancel();
@@ -650,13 +726,15 @@ voiceBtn.addEventListener('click', () => {
         }
       }).catch((error: unknown) => {
         voiceStatus.textContent = error instanceof Error ? error.message : String(error);
+        setUiState('error');
       });
     });
     mediaRecorder.start();
-    voiceBtn.textContent = 'Stop';
-    voiceStatus.textContent = 'Listening... click Stop when done.';
+    if (talkLabel) talkLabel.textContent = 'Stop';
+    voiceStatus.textContent = 'Listening… click to stop.';
   }).catch((error: unknown) => {
     voiceStatus.textContent = 'Microphone unavailable: ' + (error instanceof Error ? error.message : String(error));
+    setUiState('error');
   });
 });
 chatForm.addEventListener('submit', (event) => {
@@ -667,6 +745,7 @@ chatForm.addEventListener('submit', (event) => {
   addChatMessage('user', message);
   chatSendBtn.disabled = true;
   agentStatus.textContent = 'Muse is writing WGSL...';
+  setUiState('thinking');
   void fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -681,11 +760,13 @@ chatForm.addEventListener('submit', (event) => {
     }
     addChatMessage('agent', payload.reply || 'Done.');
     agentStatus.textContent = 'Muse harness idle';
+    setUiState('done');
   }).catch((error: unknown) => {
     const text = error instanceof Error ? error.message : String(error);
     addChatMessage('agent', 'Error: ' + text);
     agentStatus.textContent = 'Muse harness error';
     errorText.textContent = text;
+    setUiState('error');
   }).finally(() => {
     chatSendBtn.disabled = false;
     chatInput.focus();

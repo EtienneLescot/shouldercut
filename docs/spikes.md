@@ -316,3 +316,45 @@ framework). It builds solid-colour clips with ffmpeg and samples one
 pixel of the export. Both regressions were mutation-checked: restoring
 the `min()` letterbox makes it fail with `corner was rgb(0,0,0)`, and
 ignoring the renders map makes it fail with `centre was rgb(253,0,0)`.
+
+## Interface pass and the Muse mascot (Nov 2, 2026)
+
+The UI had been a stack of debug panels. It is now one screen with one
+control, because the product's claim is that you talk and it cuts.
+
+- **One state drives everything.** `document.body.dataset.ui` holds
+  `idle | listening | thinking | done | error`. CSS reads it for the
+  accent colour, the button, the frame treatment; the mascot reads it
+  for behaviour. Nothing animates from JavaScript per frame except the
+  mic meter, which writes a single `--level` custom property.
+- **The Talk button is the product.** Breathing ring when idle; while
+  listening, the ring and halo scale with the live microphone envelope
+  from an `AnalyserNode` and two concentric pulses radiate; while Muse
+  writes WGSL the ring becomes an orbiting arc; on success the core pops
+  and a light sweep crosses the picture. A scrim under the dock keeps
+  all of it legible over blown-out footage.
+- **Everything else is behind one button.** Project, playback,
+  transcript, tracking, shaders and export moved into a drawer, closed
+  by default. Every element id the app already queried is still in the
+  DOM, so none of the existing wiring changed.
+- **Muse**, the mascot, is Three.js built from primitives — no model
+  file, no loader, no asset to ship (`src/mascot.ts`). Rounded shell,
+  sunk visor, two emissive eyes, an antenna bulb that carries the state
+  at 90 px, and a work ring that only appears while editing. Idle: it
+  picks a new place to look every 1–3 s and holds it, blinks on a random
+  interval, floats. Listening: locks forward, eyes brighten, antenna
+  pulses with the mic. Thinking: head down, eyes narrowed, ring
+  orbiting, faster bob. Done: a nod.
+- Agent replies surface on a single line over the video, with the
+  `**Fait**` header stripped, rather than only in the transcript.
+
+Verified in the browser pane at 1024 px and at 375 px: idle, listening
+and thinking all read correctly, the drawer opens over the stage, and a
+real agent command (`"ajoute un halo doré chaud autour de la femme"`)
+runs through thinking → done with the shader landing in the preview.
+`npm run build` green. Three.js adds ~540 kB to the main bundle, which
+is a local demo app's problem to ignore.
+
+Correction to this morning's entry: the push-to-talk path **does** speak
+its reply — the browser's own `speechSynthesis` says the first sentence.
+What was dropped with stimm is Meta TTS, not spoken confirmation.

@@ -173,15 +173,27 @@ P2: beat-cut on music, multi-track audio.
 
 ### 2.3 Interface (thin by design)
 
-One screen: large preview canvas, project panel with the clip list and a
-minimal timeline readout, caption overlay, chat transcript and agent reply
-line, undo/redo, export, and a push-to-talk Talk button.
+One screen, and almost nothing on it: the video fills the frame, a single
+Talk button sits under it, and Muse — a small Three.js mascot — waits in
+the corner, turning its head while it has nothing to do. Everything else
+(project, playback, transcript, tracking, shaders, export) lives in a
+drawer behind one Controls button, closed by default.
+
+The whole interface runs off one state — idle, listening, thinking, done,
+error — set on the document and read by CSS, so feedback costs no
+per-frame JavaScript: the accent colour shifts, the button breathes then
+pulses with the live microphone envelope, a hairline travels around the
+frame while Muse writes WGSL, and a light sweep crosses the picture when a
+command lands. The mascot reads the same state: it scans the room when
+idle, locks on while listening with its antenna tracking the mic level,
+and drops its head over the work with a ring orbiting while it edits.
 
 Voice is push-to-talk, not an always-open room (§13): hold Talk, speak,
 release; the browser records with `MediaRecorder`, the bridge transcribes
 with Muse Voice Transcribe and feeds the text into the same supervisor
 path as a typed command, with full tool parity. The agent answers in the
-reply line; replies are written, not spoken. Chat input mirrors voice for
+reply line and speaks its first sentence back through the browser's own
+speech synthesis. Chat input mirrors voice for
 noisy rooms and as the demo backup path. No settings pages, no effect
 browser panels: effects are requested, not browsed.
 
@@ -644,7 +656,8 @@ S2); official LiveKit Meta STT plugin exists, French supported (§4 S3).
   LiveKit room plus a Python voice host plus a TTS leg was the largest
   remaining piece of plumbing in the plan and the one furthest from the
   product's point. Push-to-talk reaches the same supervisor with the same
-  tool parity in roughly thirty lines. Cost: no spoken replies, and a
+  tool parity in roughly thirty lines. Cost: no Meta TTS voice (the
+  browser’s own speech synthesis speaks the confirmation instead), and a
   held button instead of an open mic. Benefit beyond the time: the
   submission carries no first-party pre-existing dependency at all
   (§0). Reversible — nothing above the tool surface assumes the input

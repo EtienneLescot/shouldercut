@@ -76,6 +76,18 @@ section will list each shipped feature as it lands.
   the edit graph, generation and the technique registry. One harness
   serves chat and voice
 
+- [x] One-screen interface built around the Talk button: a single UI
+  state (idle / listening / thinking / done) drives the accent colour,
+  the button (breathing, then live microphone envelope, then an orbiting
+  arc while Muse writes WGSL), a travelling hairline on the frame and a
+  light sweep when a command lands. Everything else sits in a drawer,
+  closed by default
+- [x] Muse, the mascot: a Three.js character built from primitives in
+  `src/mascot.ts` — no model file — that turns its head looking around
+  while it waits, locks on with its antenna pulsing to the microphone
+  while you speak, and works head-down with a ring orbiting while it
+  edits
+
 Not built, cut deliberately (SPEC §11): Muse Image plates as shader
 inputs, dissolve transitions, caption style variants, filler-word
 removal, reframing beyond the three export presets, music-bed ducking.
@@ -99,6 +111,8 @@ import for the voice loop and is not used in the shipped build
   stream parser and mask codec used server-side by the bridge. The SAM
   adapter, mask expansion, GPU upload, and `maskAt()` wiring around it
   are built during the event.
+- `three` (third-party, MIT) — WebGL renderer for the Muse mascot. The
+  character, its rig and its behaviour are built during the event.
 - Vite and TypeScript (third-party) — build tooling.
 
 External tools invoked, not bundled: `ffmpeg` (segment extraction, edge

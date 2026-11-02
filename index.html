@@ -6,94 +6,110 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ShoulderCut</title>
 </head>
-<body>
+<body data-ui="idle">
   <main id="app">
-    <header class="topbar">
-      <div>
-        <h1>ShoulderCut</h1>
-        <p>Drop a video, then ask the agent to write any WGSL effect. No effects catalog.</p>
-      </div>
-      <label class="file-button">
-        Open video
-        <input id="fileInput" type="file" accept="video/*,.mkv,.mov,.mp4,.webm" hidden>
-      </label>
-    </header>
-
     <section id="stage" class="stage">
       <canvas id="preview" width="1280" height="720"></canvas>
-      <div id="emptyState" class="empty">Drag and drop an MP4 or WebM file here.</div>
-      <div id="dropHint" class="drop-hint hidden">Drop video to load it</div>
       <div id="captionOverlay" class="caption-overlay hidden"></div>
+      <div id="emptyState" class="empty">
+        <span class="empty-mark"></span>
+        <strong>Drop a video</strong>
+        <span>then just talk. Muse writes the shaders.</span>
+      </div>
+      <div id="dropHint" class="drop-hint hidden">Drop to load</div>
+      <div class="stage-sweep" aria-hidden="true"></div>
+      <div class="stage-edge" aria-hidden="true"></div>
     </section>
 
-    <section class="project-panel" aria-label="Edit graph project">
-      <div class="agent-head">
-        <h2>Project</h2>
-        <span id="projectStatus">No clips yet</span>
-      </div>
-      <div id="clipList" class="clip-list">Open a video: it joins the edit graph.</div>
-      <div class="row project-actions">
-        <button id="undoBtn" type="button">Undo</button>
-        <button id="redoBtn" type="button">Redo</button>
-        <select id="exportPreset" aria-label="Export preset">
-          <option value="1080p">1080p</option>
-          <option value="vertical-1080x1920">Vertical 1080x1920</option>
-          <option value="square">Square 1080x1080</option>
-        </select>
-        <button id="exportBtn" type="button">Export MP4</button>
-        <span id="exportStatus"></span>
-      </div>
-    </section>
-
-    <section class="controls" aria-label="Playback controls">
-      <div class="row transport">
-        <button id="playPauseBtn" type="button" disabled>Play</button>
-        <button id="stepBackBtn" type="button" disabled>Frame -</button>
-        <button id="stepForwardBtn" type="button" disabled>Frame +</button>
-        <label class="seek-time">
-          Time (s)
-          <input id="seekSeconds" type="number" min="0" step="0.001" value="0">
+    <header class="topbar">
+      <h1>ShoulderCut<span class="dot"></span></h1>
+      <div class="topbar-actions">
+        <label class="file-button" title="Open a video">
+          <input id="fileInput" type="file" accept="video/*,.mkv,.mov,.mp4,.webm" hidden>
+          Open video
         </label>
-        <button id="seekBtn" type="button" disabled>Seek</button>
+        <button id="drawerToggle" class="ghost" type="button" aria-expanded="false" aria-controls="drawer">Controls</button>
       </div>
-      <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" disabled>
-      <dl class="readout">
-        <div><dt>Status</dt><dd id="statusText">Starting worker...</dd></div>
-        <div><dt>Frame time</dt><dd id="frameText">-</dd></div>
-        <div><dt>Media</dt><dd id="mediaText">-</dd></div>
-        <div><dt>Decoder</dt><dd id="decoderText">-</dd></div>
-      </dl>
-      <p id="errorText" class="error" role="alert"></p>
-    </section>
+    </header>
 
-    <section class="agent-panel" aria-label="Shader agent chat">
-      <div class="agent-head">
-        <h2>Shader agent</h2>
-        <span id="agentStatus">Muse harness idle</span>
-      </div>
-      <div id="chatLog" class="chat-log" aria-live="polite">
-        <div class="message agent">Load a video, then ask for any effect. I will write and compile the WGSL live.</div>
-      </div>
+    <div class="muse" aria-hidden="true">
+      <canvas id="museCanvas"></canvas>
+    </div>
+
+    <div class="dock">
+      <p id="replyLine" class="reply-line" aria-live="polite"></p>
+      <button id="voiceBtn" class="talk" type="button" title="Hold the conversation: click to talk, click to stop">
+        <span class="talk-halo"></span>
+        <span class="talk-ring"></span>
+        <span class="talk-core">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="talk-icon">
+            <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z"/>
+            <path d="M5 11a7 7 0 0 0 14 0" fill="none" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 18v3" fill="none" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="talk-label">Talk</span>
+      </button>
+      <span id="voiceStatus" class="dock-status"></span>
+      <span id="agentStatus" class="dock-status muted">Muse harness idle</span>
       <form id="chatForm" class="chat-form">
-        <textarea id="chatInput" rows="2" placeholder="Rajoute-moi un effet d'explosion au milieu"></textarea>
-        <button id="voiceBtn" type="button" title="Push to talk">Talk</button>
+        <textarea id="chatInput" rows="1" placeholder="…or type it: “rajoute une explosion au milieu”"></textarea>
         <button id="chatSendBtn" type="submit">Send</button>
       </form>
-      <div id="voiceStatus" class="track-status"></div>
-      <div class="effects-head">
-        <h3>Object tracking (SAM 3.1)</h3>
-        <span id="trackStatus">No mask track yet</span>
-      </div>
-      <form id="trackForm" class="chat-form">
-        <input id="trackPrompt" type="text" placeholder="pillow">
-        <button id="trackBtn" type="submit">Track object</button>
-      </form>
-      <div class="effects-head">
-        <h3>Free-form effects</h3>
-        <button id="clearEffectsBtn" type="button">Clear</button>
-      </div>
-      <div id="effectsList" class="effects-list">No agent-written shader yet.</div>
-    </section>
+    </div>
+
+    <aside id="drawer" class="drawer" aria-label="Controls">
+      <section class="panel" aria-label="Edit graph project">
+        <div class="panel-head"><h2>Project</h2><span id="projectStatus">No clips yet</span></div>
+        <div id="clipList" class="clip-list">Open a video: it joins the edit graph.</div>
+        <div class="row">
+          <button id="undoBtn" type="button">Undo</button>
+          <button id="redoBtn" type="button">Redo</button>
+          <select id="exportPreset" aria-label="Export preset">
+            <option value="1080p">1080p</option>
+            <option value="vertical-1080x1920">Vertical 1080x1920</option>
+            <option value="square">Square 1080x1080</option>
+          </select>
+          <button id="exportBtn" class="primary" type="button">Export MP4</button>
+        </div>
+        <span id="exportStatus" class="panel-status"></span>
+      </section>
+
+      <section class="panel" aria-label="Playback controls">
+        <div class="panel-head"><h2>Playback</h2><span id="statusText">Starting worker…</span></div>
+        <input id="timeline" type="range" min="0" max="0" step="0.001" value="0" disabled>
+        <div class="row">
+          <button id="playPauseBtn" type="button" disabled>Play</button>
+          <button id="stepBackBtn" type="button" disabled>Frame −</button>
+          <button id="stepForwardBtn" type="button" disabled>Frame +</button>
+          <label class="seek-time">s<input id="seekSeconds" type="number" min="0" step="0.001" value="0"></label>
+          <button id="seekBtn" type="button" disabled>Seek</button>
+        </div>
+        <dl class="readout">
+          <div><dt>Frame</dt><dd id="frameText">-</dd></div>
+          <div><dt>Media</dt><dd id="mediaText">-</dd></div>
+          <div><dt>Decoder</dt><dd id="decoderText">-</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel" aria-label="Transcript">
+        <div class="panel-head"><h2>Transcript</h2></div>
+        <div id="chatLog" class="chat-log" aria-live="polite">
+          <div class="message agent">Load a video, then ask for any effect. I will write and compile the WGSL live.</div>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Object tracking and effects">
+        <div class="panel-head"><h2>Object tracking</h2><span id="trackStatus">No mask track yet</span></div>
+        <form id="trackForm" class="row">
+          <input id="trackPrompt" type="text" placeholder="the woman">
+          <button id="trackBtn" type="submit">Track</button>
+        </form>
+        <div class="panel-head"><h3>Shaders</h3><button id="clearEffectsBtn" class="ghost" type="button">Clear</button></div>
+        <div id="effectsList" class="effects-list">No agent-written shader yet.</div>
+        <p id="errorText" class="error" role="alert"></p>
+      </section>
+    </aside>
   </main>
   <script type="module" src="/src/main.ts"></script>
 </body>
