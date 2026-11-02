@@ -358,3 +358,27 @@ is a local demo app's problem to ignore.
 Correction to this morning's entry: the push-to-talk path **does** speak
 its reply — the browser's own `speechSynthesis` says the first sentence.
 What was dropped with stimm is Meta TTS, not spoken confirmation.
+
+## Mascot: Meta's Muse character (Nov 2, 2026)
+
+Replaces the invented robot. The agent's on-screen presence is now
+Meta's Muse mascot, rebuilt from Three.js primitives: cream fur, hooded
+head, two dot eyes, blushed cheeks, a small smile, stubby arms and feet.
+No Meta artwork or model file is copied and none ships; the figure is
+geometry and materials in `src/mascot.ts`. Credited as an homage in the
+README, with a line saying the project is not affiliated with Meta.
+
+Two things that took iterating:
+- **The face was invisible.** Sunk inside the hood sphere, so nothing
+  showed. Moving it proud of the hood front fixed that but produced a
+  ragged cream patch whose shape slid around as the head turned — the
+  intersection line of two ellipsoids is pose-dependent and ugly.
+- **A hood rim torus is what actually reads as a hood.** Placing a fur
+  ring over the seam hides the intersection entirely and gives the
+  silhouette its hooded shape in one primitive, at any head angle.
+
+State now shows without an antenna: the accent colour lives in the rim
+light and the CSS ground glow, the cheeks warm with the microphone
+level, the eyes widen while listening, narrow while editing and squint
+into a smile on success, and there is a short hop when a command lands.
+Legible at the 172 px the UI gives it, and at 92 px on narrow screens.

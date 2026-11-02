@@ -82,11 +82,13 @@ section will list each shipped feature as it lands.
   arc while Muse writes WGSL), a travelling hairline on the frame and a
   light sweep when a command lands. Everything else sits in a drawer,
   closed by default
-- [x] Muse, the mascot: a Three.js character built from primitives in
-  `src/mascot.ts` — no model file — that turns its head looking around
-  while it waits, locks on with its antenna pulsing to the microphone
-  while you speak, and works head-down with a ring orbiting while it
-  edits
+- [x] Muse, the mascot: Meta's Muse character as the agent's on-screen
+  presence, modelled in Three.js from primitives in `src/mascot.ts` —
+  cream fur, hooded head, dot eyes, blushed cheeks, no model file to
+  ship. It turns its head looking around while it waits, locks forward
+  with its cheeks warming to the microphone while you speak, and works
+  head-down with narrowed eyes while it edits. The character is Meta's;
+  the model, its rig and its behaviour are written here
 
 Not built, cut deliberately (SPEC §11): Muse Image plates as shader
 inputs, dissolve transitions, caption style variants, filler-word
@@ -112,7 +114,12 @@ import for the voice loop and is not used in the shipped build
   adapter, mask expansion, GPU upload, and `maskAt()` wiring around it
   are built during the event.
 - `three` (third-party, MIT) — WebGL renderer for the Muse mascot. The
-  character, its rig and its behaviour are built during the event.
+  model, its rig and its behaviour are built during the event.
+
+The Muse mascot is Meta's character, used here as an homage in a Meta
+hackathon entry. No Meta artwork or model file is copied: the figure is
+rebuilt from Three.js primitives in `src/mascot.ts`. ShoulderCut is not
+affiliated with or endorsed by Meta.
 - Vite and TypeScript (third-party) — build tooling.
 
 External tools invoked, not bundled: `ffmpeg` (segment extraction, edge

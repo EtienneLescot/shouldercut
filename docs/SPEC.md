@@ -174,8 +174,9 @@ P2: beat-cut on music, multi-track audio.
 ### 2.3 Interface (thin by design)
 
 One screen, and almost nothing on it: the video fills the frame, a single
-Talk button sits under it, and Muse — a small Three.js mascot — waits in
-the corner, turning its head while it has nothing to do. Everything else
+Talk button sits under it, and Muse — Meta's mascot, rebuilt as a small
+Three.js figure (§0: the character is Meta's, the model is ours) — waits
+in the corner, turning its head while it has nothing to do. Everything else
 (project, playback, transcript, tracking, shaders, export) lives in a
 drawer behind one Controls button, closed by default.
 
@@ -185,8 +186,8 @@ per-frame JavaScript: the accent colour shifts, the button breathes then
 pulses with the live microphone envelope, a hairline travels around the
 frame while Muse writes WGSL, and a light sweep crosses the picture when a
 command lands. The mascot reads the same state: it scans the room when
-idle, locks on while listening with its antenna tracking the mic level,
-and drops its head over the work with a ring orbiting while it edits.
+idle, locks on while listening with its cheeks warming to the mic level,
+and drops its head over the work with narrowed eyes while it edits.
 
 Voice is push-to-talk, not an always-open room (§13): hold Talk, speak,
 release; the browser records with `MediaRecorder`, the bridge transcribes
