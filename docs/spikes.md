@@ -382,3 +382,64 @@ light and the CSS ground glow, the cheeks warm with the microphone
 level, the eyes widen while listening, narrow while editing and squint
 into a smile on success, and there is a short hop when a command lands.
 Legible at the 172 px the UI gives it, and at 92 px on narrow screens.
+
+## Mascot, second pass: generated instead of modelled (Nov 2, 2026)
+
+The hand-built primitive Jolly was not good enough, and hand-modelling an
+organic plush out of spheres was the wrong tool. The mesh is now
+**generated from a reference photo** by the local ComfyUI install — which
+is the same machinery the product already uses for `edit_segment`, turned
+on the project's own asset.
+
+Searched first, as the cheaper option: **no 3D model of Jolly exists**.
+The character is from September 2026 and the model sites return generic
+mascots. The web images are all editorial and all compromised for
+image-to-3D — a BBC shot carries an added cracked-glass overlay, the
+Gizmodo render is a tight crop, the Mashable photo has hands and a prop in
+frame. The usable reference was a clean studio shot of the plush: one
+subject, plain background, full body, neutral pose.
+
+Pipeline, all local on the 4070 Ti, zero credits: ComfyUI's own
+`3d_pixal3d_trellis2_image_to_model` template — birefnet background
+removal, MoGe geometry, Pixal3D shape (Trellis 2 is wired as the
+alternative), voxel → mesh → remesh → decimate → unwrap, then texture,
+normal and AO bakes applied to the mesh, out as GLB.
+
+Two tools came out of it, both in `tools/`:
+
+- **`comfy-frontend-to-api.py`** — ComfyUI ships templates in editor
+  format; `/prompt` only takes API format, so a template cannot be
+  submitted as-is. This walks the links, pairs widget values with their
+  schema names, resolves reroutes and bypassed nodes, and prunes to the
+  subgraph feeding the outputs asked for (66 nodes → 55). Three things
+  bit, each found by a rejected submission:
+  - current ComfyUI writes a combo as the literal type `"COMBO"`, not as
+    a list of choices;
+  - the scalar types are *both* widget types and connection types, so
+    "is it an output type somewhere" cannot decide on its own — the rule
+    is scalar-or-combo first, then "nothing emits this type" to catch
+    editor-only types like `LOAD_3D`;
+  - the editor draws a `control_after_generate` widget after every seed
+    and stores its value, but the backend schema has no such input, so
+    every sampler setting after the seed shifted by one and the graph
+    came back with `scheduler: 'euler'`.
+  Known limit: a dynamic combo (`COMFY_DYNAMICCOMBO_V3`) stores its
+  sub-widgets inline and cannot be placed positionally. `RemeshMesh` is
+  the one node here that has one, and `make-mascot.py` sets it by hand.
+- **`make-mascot.py`** — upload, submit, wait, pull the GLB, in one
+  command, so the asset is reproducible rather than an unexplained binary.
+  Defaults target a 170 px on-screen mascot, not the template's hero
+  model: the first run at the template's own settings produced a **41 MB**
+  GLB (700k faces, 4096 textures).
+
+In the app, `src/mascot.ts` loads the GLB with `GLTFLoader`, normalises it
+to a known height and stands it on y=0 so the body rotates about its
+**feet** — pivoting about the centre made every lean read as the character
+tipping over in mid-air. If the GLB is missing it warns and renders
+nothing, rather than breaking the page.
+
+What the generated mesh costs: it is one piece, so there is no head to
+turn on its own and no blinking — the eyes and mouth are in the texture.
+The whole figure turns instead, which reads correctly at this size, and
+the state shows through posture: it leans in while listening, leans
+forward head-down over the work, hops once on success.

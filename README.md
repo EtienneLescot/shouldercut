@@ -82,13 +82,20 @@ section will list each shipped feature as it lands.
   arc while Muse writes WGSL), a travelling hairline on the frame and a
   light sweep when a command lands. Everything else sits in a drawer,
   closed by default
-- [x] Muse, the mascot: Meta's Muse character as the agent's on-screen
-  presence, modelled in Three.js from primitives in `src/mascot.ts` —
-  cream fur, hooded head, dot eyes, blushed cheeks, no model file to
-  ship. It turns its head looking around while it waits, locks forward
-  with its cheeks warming to the microphone while you speak, and works
-  head-down with narrowed eyes while it edits. The character is Meta's;
-  the model, its rig and its behaviour are written here
+- [x] Jolly, the mascot: Meta's Muse character as the agent's on-screen
+  presence, **generated as a 3D mesh by the local ComfyUI install** from
+  a reference photo (`tools/make-mascot.py`, see `docs/spikes.md`) and
+  loaded with Three.js in `src/mascot.ts`. It turns to look around while
+  it waits, leans in while you speak, leans forward head-down while it
+  edits, and hops once when a command lands. The same generative
+  machinery the product uses for `edit_segment`, turned on the project's
+  own asset. The character is Meta's; the mesh, its framing and its
+  behaviour are produced here
+- [x] Two ComfyUI tools written along the way: `comfy-frontend-to-api.py`
+  converts an editor-format template into the API format `/prompt`
+  accepts, resolving reroutes and bypassed nodes and pruning to the
+  outputs you keep; `make-mascot.py` runs the image-to-3D graph end to
+  end so the mascot asset is reproducible rather than an opaque binary
 
 Not built, cut deliberately (SPEC §11): Muse Image plates as shader
 inputs, dissolve transitions, caption style variants, filler-word
@@ -116,10 +123,11 @@ import for the voice loop and is not used in the shipped build
 - `three` (third-party, MIT) — WebGL renderer for the Muse mascot. The
   model, its rig and its behaviour are built during the event.
 
-The Muse mascot is Meta's character, used here as an homage in a Meta
-hackathon entry. No Meta artwork or model file is copied: the figure is
-rebuilt from Three.js primitives in `src/mascot.ts`. ShoulderCut is not
-affiliated with or endorsed by Meta.
+Jolly, the Muse mascot, is Meta's character, used here as an homage in a
+Meta hackathon entry. No Meta artwork or 3D file is redistributed: the
+mesh in `public/mascot/jolly.glb` is generated locally from a reference
+photo by `tools/make-mascot.py`, and that script reproduces it from
+scratch. ShoulderCut is not affiliated with or endorsed by Meta.
 - Vite and TypeScript (third-party) — build tooling.
 
 External tools invoked, not bundled: `ffmpeg` (segment extraction, edge
