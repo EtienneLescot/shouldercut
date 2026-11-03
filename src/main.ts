@@ -655,26 +655,37 @@ let mediaRecorder: MediaRecorder | null = null;
 let voiceChunks: Blob[] = [];
 const talkLabel = voiceBtn.querySelector<HTMLElement>('.talk-label');
 
-/** Feeds the mic envelope to the button rings and the mascot's antenna. */
-function meterStream(stream: MediaStream): () => void {
+/** Raw sample deviation below which a recording is silence, not quiet
+ *  speech. A live but dead input (a wireless headset that is switched off
+ *  enumerates and opens fine) reads 0; a quiet room still reads several. */
+const SILENCE_PEAK = 3;
+
+/** Feeds the mic envelope to the button rings and the mascot, and remembers
+ *  the loudest sample so the caller can tell silence from speech. */
+function meterStream(stream: MediaStream): { stop: () => void; peak: () => number } {
   const audio = new AudioContext();
   const analyser = audio.createAnalyser();
   analyser.fftSize = 512;
   audio.createMediaStreamSource(stream).connect(analyser);
   const bins = new Uint8Array(analyser.frequencyBinCount);
   let raf = 0;
+  let loudest = 0;
   const tick = (): void => {
     raf = requestAnimationFrame(tick);
     analyser.getByteTimeDomainData(bins);
     let peak = 0;
     for (const v of bins) peak = Math.max(peak, Math.abs(v - 128));
+    if (peak > loudest) loudest = peak;
     setMicLevel(Math.min(1, (peak / 128) * 2.2));
   };
   tick();
-  return () => {
-    cancelAnimationFrame(raf);
-    void audio.close();
-    setMicLevel(0);
+  return {
+    stop: () => {
+      cancelAnimationFrame(raf);
+      void audio.close();
+      setMicLevel(0);
+    },
+    peak: () => loudest,
   };
 }
 
@@ -686,14 +697,25 @@ voiceBtn.addEventListener('click', () => {
   void navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
     voiceChunks = [];
     mediaRecorder = new MediaRecorder(stream);
-    const stopMeter = meterStream(stream);
+    const meter = meterStream(stream);
+    // Name the input. A machine with several microphones hands
+    // getUserMedia the system default, which is not always the one the
+    // person is talking into.
+    const device = stream.getAudioTracks()[0]?.label || 'microphone';
     send({ type: 'pause' });
     setUiState('listening');
-    mediaRecorder.addEventListener('stop', () => stopMeter(), { once: true });
+    mediaRecorder.addEventListener('stop', () => meter.stop(), { once: true });
     mediaRecorder.addEventListener('dataavailable', (e) => { if (e.data.size) voiceChunks.push(e.data); });
     mediaRecorder.addEventListener('stop', () => {
       stream.getTracks().forEach((t) => t.stop());
       if (talkLabel) talkLabel.textContent = 'Talk';
+      // Never pay for transcribing silence, and say which input was dead:
+      // a switched-off wireless headset still opens and streams zeros.
+      if (meter.peak() < SILENCE_PEAK) {
+        voiceStatus.textContent = 'Rien entendu sur « ' + device + ' ». Vérifiez ce micro, ou changez l’entrée par défaut de Windows.';
+        setUiState('error');
+        return;
+      }
       setUiState('thinking');
       const blob = new Blob(voiceChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
       voiceStatus.textContent = 'Transcribing...';
@@ -731,7 +753,7 @@ voiceBtn.addEventListener('click', () => {
     });
     mediaRecorder.start();
     if (talkLabel) talkLabel.textContent = 'Stop';
-    voiceStatus.textContent = 'Listening… click to stop.';
+    voiceStatus.textContent = 'J’écoute sur « ' + device + ' »… cliquez pour arrêter.';
   }).catch((error: unknown) => {
     voiceStatus.textContent = 'Microphone unavailable: ' + (error instanceof Error ? error.message : String(error));
     setUiState('error');
