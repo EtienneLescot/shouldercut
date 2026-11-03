@@ -335,6 +335,17 @@ body[data-ui='done'] .talk-core { animation: pop 0.45s cubic-bezier(0.34, 1.56, 
 }
 body[data-ui='listening'] .talk-label { color: var(--accent); }
 
+/* Only shown when the machine has more than one input: browsers rank
+   microphones themselves and do not always follow the system default. */
+.mic-select {
+  max-width: min(320px, 90vw);
+  padding: 4px 9px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+.mic-select.hidden { display: none; }
+
 .dock-status { font-size: 12px; color: var(--muted); min-height: 1em; text-align: center; }
 .dock-status.muted { opacity: 0.6; }
 

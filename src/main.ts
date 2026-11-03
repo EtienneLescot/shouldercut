@@ -44,7 +44,9 @@ const replyLine = document.querySelector<HTMLElement>('#replyLine');
 const drawer = document.querySelector<HTMLElement>('#drawer');
 const drawerToggle = document.querySelector<HTMLButtonElement>('#drawerToggle');
 const stageSweep = document.querySelector<HTMLElement>('.stage-sweep');
+const micSelect = document.querySelector<HTMLSelectElement>('#micSelect');
 
+if (!micSelect) throw new Error('Missing microphone selector');
 if (!museCanvas || !replyLine || !drawer || !drawerToggle || !stageSweep) {
   throw new Error('Missing application chrome');
 }
@@ -689,12 +691,57 @@ function meterStream(stream: MediaStream): { stop: () => void; peak: () => numbe
   };
 }
 
+// Which microphone to record from. Browsers keep their own ranking of
+// inputs and do not necessarily follow the system default -- Edge will
+// hand every page a headset it ranks above "default", even one that is
+// switched off and streams silence. So let the choice be explicit.
+const MIC_KEY = 'shouldercut.micDeviceId';
+
+async function refreshMics(): Promise<void> {
+  let devices: MediaDeviceInfo[] = [];
+  try {
+    devices = await navigator.mediaDevices.enumerateDevices();
+  } catch { return; }
+  const inputs = devices.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'communications');
+  if (inputs.length < 2) {
+    micSelect!.classList.add('hidden');
+    return;
+  }
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(MIC_KEY); } catch { saved = null; }
+  micSelect!.replaceChildren();
+  for (const input of inputs) {
+    const option = document.createElement('option');
+    option.value = input.deviceId;
+    // Labels stay empty until the page has been granted the microphone once.
+    option.textContent = input.label || 'Microphone ' + input.deviceId.slice(0, 6);
+    if (input.deviceId === saved) option.selected = true;
+    micSelect!.append(option);
+  }
+  micSelect!.classList.remove('hidden');
+}
+
+micSelect.addEventListener('change', () => {
+  try { localStorage.setItem(MIC_KEY, micSelect!.value); } catch { /* private window */ }
+  voiceStatus!.textContent = 'Micro : ' + (micSelect!.selectedOptions[0]?.textContent || '');
+});
+void refreshMics();
+navigator.mediaDevices.addEventListener?.('devicechange', () => void refreshMics());
+
+function micConstraint(): MediaStreamConstraints {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(MIC_KEY); } catch { saved = null; }
+  return saved ? { audio: { deviceId: { exact: saved } } } : { audio: true };
+}
+
 voiceBtn.addEventListener('click', () => {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop();
     return;
   }
-  void navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+  void navigator.mediaDevices.getUserMedia(micConstraint()).then((stream) => {
+    // Labels only become readable once permission has been granted.
+    void refreshMics();
     voiceChunks = [];
     mediaRecorder = new MediaRecorder(stream);
     const meter = meterStream(stream);
