@@ -1,14 +1,61 @@
+<div align="center">
+
+<img src="docs/media/mascot.gif" width="160" alt="Muse, the editor, at her desk" />
+
 # ShoulderCut
 
-Your video editor, standing over your shoulder: you talk, it cuts.
+### Your video editor, standing over your shoulder. You talk, it cuts.
 
-Meta Global AI Developer Hackathon — Indie Developer track.
-Problem statement: Build for Your World.
+**Meta Global AI Developer Hackathon** · Indie Developer track · *Build for Your World*
 
-Status: submitted Nov 4, 2026. Feature-complete on the P0 scope,
-with every check green: 42 node tests, 19 voice tests, a clean typecheck
-and a green build.
-Specification: [docs/SPEC.md](docs/SPEC.md), kept current with the build.
+![The editor with a SAM 3.1 cutout applied to the subject](docs/media/editor.jpg)
+
+</div>
+
+---
+
+Most editors make you learn where everything is. This one you just talk to.
+
+Say *"cut out the subject and put a red jacket on her"* and Muse — the small
+figure up there, who turns round when you speak and keeps working when you
+don't — tracks the subject with **SAM 3.1**, writes the shader herself, and
+hands the segment to whichever generation backend is reachable. There is no
+effects catalogue: **every effect is WGSL the model authors on the spot**,
+compiled live in your browser.
+
+| | |
+| --- | --- |
+| **Talk, don't hunt for menus** | A realtime voice session, or type in the same box. She answers while an edit is still running. |
+| **The subject, not the frame** | SAM 3.1 masks drive every effect and every replacement, so the rest of the picture is untouched. |
+| **Effects written, not chosen** | No catalogue. Muse Wonder writes WGSL against a documented interface, and a failed compile never breaks the preview. |
+| **Free on your GPU, or hosted** | Local ComfyUI costs nothing. No GPU? The same request routes to fal.ai. Measured: $0.00 to $4.56 a pass. |
+| **Your footage stays yours** | Local-first by design. No hosted instance, and no API key ever reaches the browser. |
+
+## The Meta models, and what each one does
+
+One `MODEL_API_KEY`, four services, each doing a distinct job:
+
+| Model | What it does here | Where |
+| --- | --- | --- |
+| **SAM 3.1** | Segments and tracks a subject from a plain noun phrase. The mask is what makes "her jacket" mean her jacket. | [`server/sam.ts`](server/sam.ts) |
+| **Muse Wonder** | The editor itself: reads the instruction, picks the tools, writes the WGSL. | [`server/muse-runner.ts`](server/muse-runner.ts) |
+| **Muse Spark** | The conversation. Small and fast, so she can talk over a long render. | [`server/conversation.ts`](server/conversation.ts) |
+| **Meta ASR** | Speech to text, for captions and for the recorded-instruction fallback. | [`server/transcribe.ts`](server/transcribe.ts) |
+
+## Where to read more
+
+| | |
+| --- | --- |
+| [docs/SPEC.md](docs/SPEC.md) | The specification, kept current with the build |
+| [docs/fx-interface.md](docs/fx-interface.md) | The WGSL contract Muse writes against |
+| [docs/operations.md](docs/operations.md) | What runs, what it costs, who pays |
+| [docs/remote-access.md](docs/remote-access.md) | Letting someone else drive your editor |
+| [docs/dogfooding.md](docs/dogfooding.md) | The harness that measures every backend |
+| [AGENTS.md](AGENTS.md) | How changes get made here: fix the class, never the case |
+
+Status: submitted 4 November 2026, feature-complete on the P0 scope, every
+check green — 47 node tests, 19 python tests, a clean typecheck and a green
+build.
 
 ## Run it
 
