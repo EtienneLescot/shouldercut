@@ -68,7 +68,7 @@ export class MuseEvents {
         const kind = String(p.event.task_kind || "");
         if (!kind.startsWith("tool.mcp__shouldercut_fx__")) continue;
         const tool = kind.slice("tool.mcp__shouldercut_fx__".length);
-        this.phase = TOOL_LABELS[tool] || "Montage en cours";
+        this.phase = TOOL_LABELS[tool] || "Editing";
         this.progress({ phase: this.phase, tool });
       }
     }

@@ -9,10 +9,14 @@ from dialogue import MetaDialogue, quick_playback
 
 class DialogueTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.message = {'content': 'Je peux couper tes clips.'}
+        self.message = {'content': 'I can cut your clips.'}
         self.sent = None
+        # Every request, because _asks_for_an_edit fires a second one
+        # whenever no tool was called and it would otherwise hide the first.
+        self.requests = []
         async def respond(request):
             self.sent = await request.json()
+            self.requests.append(self.sent)
             return web.json_response({'choices': [{'message': self.message}]})
         app = web.Application(); app.router.add_post('/chat', respond)
         self.runner = web.AppRunner(app); await self.runner.setup()
@@ -26,8 +30,8 @@ class DialogueTests(unittest.IsolatedAsyncioTestCase):
     async def test_plain_conversation_has_no_edit_and_receives_real_work_status(self):
         result = await self.dialogue.reply('What are you doing?', [{'role': 'agent', 'text': 'Hi'}], {'edit_in_progress': 'blur'})
         self.assertIsNone(result.command)
-        self.assertIn('blur', self.sent['messages'][0]['content'])
-        self.assertEqual(self.sent['messages'][1]['role'], 'assistant')
+        self.assertIn('blur', self.requests[0]['messages'][0]['content'])
+        self.assertEqual(self.requests[0]['messages'][1]['role'], 'assistant')
 
     async def test_explicit_playback_needs_no_model_but_negations_are_not_shortcuts(self):
         result = await self.dialogue.reply('Go to one second.', [], {})

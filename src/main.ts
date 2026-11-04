@@ -1361,7 +1361,7 @@ pttBtn.addEventListener("click", () => {
     })
     .catch((error: unknown) => {
       voiceStatus.textContent =
-        "Microphone indisponible : " +
+        "Microphone unavailable: " +
         (error instanceof Error ? error.message : String(error));
       setUiState("error");
       unlock();
@@ -1435,7 +1435,7 @@ chatForm.addEventListener("submit", (event) => {
     .catch((error: unknown) => {
       const text = error instanceof Error ? error.message : String(error);
       addChatMessage("agent", text);
-      agentStatus.textContent = "Le montage demande votre attention";
+      agentStatus.textContent = "The edit needs your attention";
       errorText.textContent = text;
       setUiState("error");
     })

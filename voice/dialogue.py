@@ -84,8 +84,8 @@ class MetaDialogue:
                 async with self.http.get(os.getenv('SHOULDERCUT_BRIDGE', 'http://127.0.0.1:5173') + '/api/assistant/context', timeout=aiohttp.ClientTimeout(total=1)) as response:
                     if response.status == 200:
                         actual = await response.json()
-                        status = {**actual, **status, 'montage_en_cours':
-                                  status.get('montage_en_cours') or actual.get('montage_en_cours')}
+                        status = {**actual, **status, 'edit_in_progress':
+                                  status.get('edit_in_progress') or actual.get('edit_in_progress')}
             except (aiohttp.ClientError, TimeoutError):
                 pass
         record('dialogue.context', elapsed_ms=round((time.monotonic() - context_started) * 1000))
@@ -144,4 +144,4 @@ class MetaDialogue:
             # A safety net, never a gate: a failure here must not swallow the
             # reply the user is already waiting for.
             return False
-        return bool(re.match(r"\W*oui", str(verdict.get('content') or ''), re.IGNORECASE))
+        return bool(re.match(r"\W*yes", str(verdict.get('content') or ''), re.IGNORECASE))

@@ -8,8 +8,9 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5173",
-    "test": "node --experimental-strip-types tools/test-export.ts",
-    "diagnostics": "node tools/analyze-ux.mjs"
+    "test": "node --experimental-strip-types --test tools/test-*.ts",
+    "diagnostics": "node tools/analyze-ux.mjs",
+    "test:voice": "uv run --directory voice python -m unittest discover -p \"test_*.py\""
   },
   "dependencies": {
     "@meta-sam/parser": "^0.1.0",

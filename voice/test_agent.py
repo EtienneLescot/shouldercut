@@ -13,10 +13,10 @@ from dialogue import Reply
 class FakeDialogue:
     async def reply(self, text, history, status):
         if text == 'Mets en pause':
-            return Reply('Je mets en pause.', action={'name': 'control_video', 'action': 'pause', 'time': None})
+            return Reply('Pausing.', action={'name': 'control_video', 'action': 'pause', 'time': None})
         if text == 'Where are you at?':
-            return Reply('Je travaille encore sur le flou.')
-        return Reply('Je vais le faire.', text)
+            return Reply('Still working on the blur.')
+        return Reply('On it.', text)
 
 
 class VoiceTests(unittest.IsolatedAsyncioTestCase):
@@ -47,8 +47,8 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
             self.reached.set()
             await self.release.wait()
             if self.fail_edit:
-                return web.json_response({"ok": False, "message": "Suivi indisponible"}, status=500)
-            return web.json_response({"ok": True, "reply": "**C'est fait.**"})
+                return web.json_response({"ok": False, "message": "Tracking unavailable"}, status=500)
+            return web.json_response({"ok": True, "reply": "**Done.**"})
 
         async def action(request):
             self.actions.append(await request.json())
@@ -81,26 +81,26 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         await self.supervisor.on_transcript(TranscriptMessage(text=text, partial=partial, timestamp=0))
 
     async def test_interruption_does_not_cancel_edit_and_next_command_keeps_history(self):
-        await self.turn('Ajoute un flou', partial=True)
+        await self.turn('Add a blur', partial=True)
         self.assertTrue(self.supervisor.queue.empty())
-        await self.turn('Ajoute un flou')
+        await self.turn('Add a blur')
         await asyncio.wait_for(self.reached.wait(), 2)
         # Cancel every in-flight voice utterance as if the user barged in.
         for task in list(self.supervisor.tasks):
             task.cancel()
-        await self.turn('Un peu moins')
+        await self.turn('A bit less')
         await self.supervisor.dialogue_task
         self.assertEqual(len(self.requests), 1)
         self.release.set()
         await asyncio.wait_for(self.supervisor.queue.join(), 2)
-        self.assertEqual([r['message'] for r in self.requests], ['Ajoute un flou', 'Un peu moins'])
+        self.assertEqual([r['message'] for r in self.requests], ['Add a blur', 'A bit less'])
         self.assertEqual(self.requests[1]['history'], [
-            {'role': 'user', 'text': 'Ajoute un flou'}, {'role': 'agent', 'text': "C'est fait."},
+            {'role': 'user', 'text': 'Add a blur'}, {'role': 'agent', 'text': "Done."},
         ])
         self.assertEqual(sum(kind == 'edit_done' for kind, _ in self.events), 2)
 
     async def test_playback_bypasses_blocked_edit_and_waits_for_final(self):
-        await self.turn('Ajoute un flou')
+        await self.turn('Add a blur')
         await asyncio.wait_for(self.reached.wait(), 2)
         self.supervisor.preview('Mets en pause')
         await self.supervisor.preview_task
@@ -110,7 +110,7 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.action_reached.wait(), 2)
         self.assertEqual(self.actions[0]['action'], 'pause')
         self.assertEqual(len(self.requests), 1)
-        self.assertEqual(self.supervisor.active_command, 'Ajoute un flou')
+        self.assertEqual(self.supervisor.active_command, 'Add a blur')
         self.assertTrue(self.supervisor.queue.empty())
 
     async def test_missing_credentials_fails_clearly(self):
@@ -141,7 +141,7 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_edit_failure_clears_work_and_does_not_claim_success(self):
         self.fail_edit = True
         self.release.set()
-        await self.turn('Ajoute un flou')
+        await self.turn('Add a blur')
         await self.supervisor.dialogue_task
         await asyncio.wait_for(self.supervisor.queue.join(), 2)
         errors = [payload for kind, payload in self.events if kind == 'error']
@@ -151,14 +151,14 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(kind == 'edit_done' for kind, _ in self.events))
 
     async def test_conversation_during_edit_does_not_enqueue_another_edit(self):
-        await self.turn('Ajoute un flou')
+        await self.turn('Add a blur')
         await asyncio.wait_for(self.reached.wait(), 2)
         await self.turn('Where are you at?')
         await self.supervisor.dialogue_task
         await asyncio.sleep(0)
         self.assertEqual(len(self.requests), 1)
         self.assertTrue(self.supervisor.queue.empty())
-        self.assertIn('Je travaille encore sur le flou.', self.speeches)
+        self.assertIn('Still working on the blur.', self.speeches)
 
     async def test_stimm_stream_finishes_for_both_livekit_readers(self):
         from stimm.voice_agent import _SpeechStream

@@ -48,7 +48,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
     audioElements.clear();
     for (const output of outputMeters.values()) output.stop();
     outputMeters.clear();
-    if (label) label.textContent = "Parler";
+    if (label) label.textContent = "Talk";
     ui.button.setAttribute("aria-pressed", "false");
     ui.fallback.disabled = false;
     ui.selector.disabled = false;
@@ -92,7 +92,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
         const response = await fetch("/api/voice/token");
         const data = await response.json();
         if (!response.ok || !data.ok)
-          throw new Error(data.message || "Connexion vocale indisponible.");
+          throw new Error(data.message || "Voice connection unavailable.");
         const call = new Room();
         room = call;
         call.on(RoomEvent.TrackSubscribed, (track) => {
@@ -132,9 +132,9 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
           if (event.type === "ready") {
             clearTimeout(readyTimer);
             ui.status.textContent =
-              "Conversation ouverte · " +
+              "Conversation open · " +
               event.provider +
-              " · micro : " +
+              " · mic: " +
               mic?.mediaStreamTrack.label;
             void call.localParticipant.publishData(
               new TextEncoder().encode(
@@ -175,8 +175,8 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
             ui.status.textContent = "Listening.";
           } else if (event.type === "provider") {
             ui.status.textContent = event.available
-              ? "Voix disponible : " + event.provider
-              : "Voix indisponible : " +
+              ? "Voice available: " + event.provider
+              : "Voice unavailable: " +
                 event.provider +
                 " · switching to the fallback voice";
           } else if (event.type === "error") {

@@ -156,7 +156,7 @@ export regression check (needs `ffmpeg` and `ffprobe` on PATH).
 
 Then open http://127.0.0.1:5173/ in Chrome or Edge, drag in a local
 MP4/WebM file, and ask in chat for any effect (for example
-"Rajoute-moi un effet d'explosion au milieu"). The local bridge starts
+"Add an explosion effect in the middle"). The local bridge starts
 Muse (`muse exec`) with the `shouldercut-fx` MCP server; the agent
 writes WGSL against `docs/fx-interface.md`, and the browser compiles it
 live. Muse must be installed and logged in on this machine.

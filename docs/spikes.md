@@ -139,8 +139,9 @@ built-in effects. The contract lives in `docs/fx-interface.md`.
   the whole map; literal `env` values are refused as secret leaves, so
   the MCP server defaults to the local bridge URL.
 - End-to-end UI test: drag/drop-equivalent file load, seek to 1.400 s,
-  chat message "Rajoute-moi un effet d'explosion au milieu". Muse
-  answered in French, created effect `explosion-center` (4,435 chars
+  chat message "Rajoute-moi un effet d'explosion au milieu" ("add an
+  explosion effect in the middle"; this run predates the switch to
+  English). Muse answered in French, created effect `explosion-center` (4,435 chars
   of WGSL, range 1.40–2.90 s), compilation succeeded, and a screenshot
   at 2.075 s shows the generated explosion composited at frame center
   over the source. No console errors.

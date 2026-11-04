@@ -166,7 +166,7 @@ async function asksForAnEdit(text: string): Promise<boolean> {
       [],
       8_000,
     );
-    return /^\W*oui/i.test(String(verdict.content || ""));
+    return /^\W*yes/i.test(String(verdict.content || ""));
   } catch {
     // This is a safety net, never a gate: a failure here must not swallow
     // the reply the user is already waiting for.

@@ -574,7 +574,7 @@ function dialogueContext(): Record<string, unknown> {
   return {
     player: browserState,
     selection,
-    montage_en_cours:
+    edit_in_progress:
       chatRunning ||
       genManager.list().some((j) => !["done", "failed"].includes(j.state)),
     transformations: genManager
@@ -586,7 +586,7 @@ function dialogueContext(): Record<string, unknown> {
         error: j.error,
         errorCode: j.errorCode,
       })),
-    commandes_en_attente: queuedEdits,
+    queued_commands: queuedEdits,
     clips: editGraph
       .get()
       .clips.map((c) => ({ id: c.id, name: c.name, in: c.in, out: c.out })),

@@ -143,7 +143,7 @@ class EditingSupervisor(Supervisor):
             trace_id.set(speculative_trace)
             await asyncio.sleep(.3)
             return await self.dialogue.reply(text, self.history, {
-                "montage_en_cours": self.active_command, "commandes_en_attente": self.queue.qsize(),
+                "edit_in_progress": self.active_command, "queued_commands": self.queue.qsize(),
             })
         self.preview_task = self.schedule(prepare())
 
@@ -159,7 +159,7 @@ class EditingSupervisor(Supervisor):
                 decision = await preview
             else:
                 decision = await self.dialogue.reply(text, self.history, {
-                    "montage_en_cours": self.active_command, "commandes_en_attente": self.queue.qsize(),
+                    "edit_in_progress": self.active_command, "queued_commands": self.queue.qsize(),
                 })
         except Exception as exc:
             await self.emit("error", message=str(exc))
@@ -211,7 +211,7 @@ class EditingSupervisor(Supervisor):
                         data = await response.json()
                         if response.status != 200 or not data.get("ok"):
                             raise RuntimeError(data.get("message", "The edit failed."))
-                    reply = spoken_text(data.get("reply") or "C'est fait.")
+                    reply = spoken_text(data.get("reply") or "Done.")
                     self.edit_history.extend([{"role": "user", "text": text}, {"role": "agent", "text": reply}])
                     self.history.append({"role": "agent", "text": reply})
                     await self.emit("edit_done", elapsed_ms=round((time.monotonic() - started) * 1000), pending=self.queue.qsize())
