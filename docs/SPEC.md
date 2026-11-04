@@ -81,9 +81,9 @@ verification notes, the README holds the feature list shown in the demo.
 
 ## 1. Product
 
-**Pitch.** You direct, Muse cuts: the over-the-shoulder note that changes the cut, said out loud.
-cuts. A conversational editing agent that performs full edits and
-object-aware 3D shader effects in real time, driven by voice.
+**Pitch.** You direct, Muse cuts: the over-the-shoulder note that changes
+the cut, said out loud. A conversational editing agent that performs full
+edits and object-aware 3D shader effects in real time, driven by voice.
 
 **Concept.** The user speaks to the editor the way a director speaks to a
 human editor sitting next to them: "blur the background", "make the car
