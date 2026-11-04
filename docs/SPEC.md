@@ -220,7 +220,7 @@ search samples 12 chronological frames of the open clip, refines matches on
 long clips, and seeks to the matching sample. Events between samples can be
 missed: an inconclusive result leaves playback where it was.
 
-“Détoure la femme” produces a SAM preview from a 0.25-second excerpt at the
+“Cut out the woman” produces a SAM preview from a 0.25-second excerpt at the
 playhead. Its canvas overlay highlights the subject and dims the background;
 it never changes the shader stack, an existing effect's mask, or the export.
 A later replacement/edit request goes to the editing specialist, which tracks
@@ -353,11 +353,11 @@ is the leg that passed. What was verified and is now unused: `stimm` +
 `livekit-agents[meta]` import cleanly together, and the official LiveKit
 Meta plugin exposes `meta.STT` (model `muse-voice-transcribe-1.0`,
 realtime WebSocket, PCM16 24 kHz, cumulative interim transcripts,
-server-side endpointing, `language_bias` including French, 60 min
+server-side endpointing, `language_bias` (English here), 60 min
 session cap).
 
 Still unmeasured, and the one number worth having before the demo: the
-valid-op rate of spoken commands. The 20-command FR/EN set of §12 has
+valid-op rate of spoken commands. The 20-command English set of §12 has
 not been run as a scored eval against the shipped push-to-talk path.
 Original pass bar, kept as the bar: effect applied under ~2 s perceived,
 ≥ 18/20 commands become valid operations without repair.
@@ -642,7 +642,7 @@ Tests (planned):
 - Browser matrix: Chrome and Edge on Windows and macOS. Safari/Firefox
   are best-effort and show a clear "use Chrome/Edge" message if WebGPU
   external textures or hardware WebCodecs are missing.
-- Agent eval: the 20-command set from Spike S3 (FR + EN) re-run after
+- Agent eval: the 20-command set from Spike S3 (English) re-run after
   every prompt/schema change.
 
 Demo (3 minutes, shows only hackathon-built features):
@@ -708,7 +708,7 @@ S2); official LiveKit Meta STT plugin exists, French supported (§4 S3).
 
 ### Open questions
 
-- Muse Voice Transcribe French quality on real footage (turn-level
+- Muse Voice Transcribe quality on real footage (turn-level
   timestamps confirmed; word timestamps do not exist).
 - Judge-facing deployment: the app needs the local bridge for `muse
   exec`, ffmpeg and ComfyUI, so a purely static deployment cannot show

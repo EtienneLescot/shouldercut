@@ -249,8 +249,8 @@ benchmark (step 3 of §9), never hard-coded in product copy.
    recomposited through the SAM mask by our host; a provider that
    re-renders the whole frame never gets the last word on pixels
    outside the requested zone.
-4. **Controls are sentences, then numbers.** The user says "les
-   enfants, en robots, plus métal"; the supervisor derives subject
+4. **Controls are sentences, then numbers.** The user says "the kids,
+   as robots, more metal"; the supervisor derives subject
    (SAM prompt), segment (current clip range), strength and tier,
    and states them in its one-sentence confirmation.
 5. **Every generation is a graph node.** Result clips enter the
@@ -291,8 +291,7 @@ benchmark (step 3 of §9), never hard-coded in product copy.
 ## 8. The target demo, end to end
 
 Footage: `tools/bench/assets/bedroom.mp4` — two children bouncing
-on a bed, 6.7 s, 960×540. Command, spoken: « Transforme les enfants
-en robots. »
+on a bed, 6.7 s, 960×540. Command, spoken: “Turn the children into robots.”
 
 1. Supervisor parses the intent: transform, subjects = children,
    whole clip. It speaks its one-sentence confirmation and, the
@@ -314,7 +313,7 @@ en robots. »
    final tier re-priced from the benchmarked endpoint.
 4. The result is recomposited through the mask, grade-matched and
    crossfaded in over the optimistic treatment (300 ms, §7.7).
-   The user says « plus métal » or « valide »; at most one retry,
+   The user says “more metal” or “ship it”; at most one retry,
    then the final tier, which replaces the draft the same way.
 5. Captions, a shader grade and export close the demo exactly as
    SPEC §12 already scripts it.

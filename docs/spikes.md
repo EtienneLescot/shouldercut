@@ -232,12 +232,13 @@ demo scale, not a matte.
 French command was synthesised locally (Windows SAPI, `fr-FR`
 Hortense), encoded to webm/opus and posted to `/api/voice/command`, the
 exact endpoint the Talk button hits. "Ajoute un flash lumineux à la fin
-du clip" transcribed as *"Ajoute un un flash lumineux à la fin du
-clip."* — one duplicated word, intent intact — and the supervisor
+du clip" ("Add a flash of light at the end of the clip"; this run predates
+the switch to English) transcribed as *"Ajoute un un flash lumineux à la
+fin du clip."* — one duplicated word, intent intact — and the supervisor
 applied a white flash over 5.1–6.0 s, verified visually at the 5.35 s
 peak. Round trip **37 s**, against the §9 budget of ≤ 2 s. The cost is
 the agent turn, not transcription. Clean TTS speech is an easy case:
-the §12 20-command FR/EN eval on real speech is still unrun.
+the §12 20-command English eval on real speech is still unrun.
 
 **FIXED — `1080p` export preset letterboxed every sub-1080p source.**
 `scale=min(1920\,iw):min(1080\,ih)` evaluates to the source size for
@@ -350,7 +351,8 @@ control, because the product's claim is that you talk and it cuts.
 
 Verified in the browser pane at 1024 px and at 375 px: idle, listening
 and thinking all read correctly, the drawer opens over the stage, and a
-real agent command (`"ajoute un halo doré chaud autour de la femme"`)
+real agent command (`"ajoute un halo doré chaud autour de la femme"`,
+"add a warm golden halo around the woman")
 runs through thinking → done with the shader landing in the preview.
 `npm run build` green. Three.js adds ~540 kB to the main bundle, which
 is a local demo app's problem to ignore.
