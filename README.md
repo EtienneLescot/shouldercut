@@ -5,7 +5,9 @@ Your video editor, standing over your shoulder: you talk, it cuts.
 Meta Global AI Developer Hackathon — Indie Developer track.
 Problem statement: Build for Your World.
 
-Status: day 7 of 9 (Nov 2, 2026), feature-complete on the P0 scope.
+Status: submitted Nov 4, 2026. Feature-complete on the P0 scope,
+with every check green: 42 node tests, 19 voice tests, a clean typecheck
+and a green build.
 Specification: [docs/SPEC.md](docs/SPEC.md), kept current with the build.
 
 ## Built during the hackathon
