@@ -8,7 +8,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 let cachedFalKey: string | null | undefined;
 export function falKey(): string | null {
@@ -108,6 +108,31 @@ export function validateEditInputs(
   }
 }
 
+/** Fit a clip's own shape into a pixel budget, with both sides a multiple of
+ * `multiple`. Never an upscale, beyond that rounding.
+ *
+ * Every working size in this pipeline goes through here. Pinning both sides of
+ * a scale= expression is how a portrait clip gets handed to a model as a
+ * smeared 16:9 picture: the model returns a 16:9 near-copy, the composite
+ * pastes it back, and the edit the user asked for silently never happens. A
+ * budget says how many pixels we are willing to spend; the clip says what
+ * shape they go in. `multiple` is 16 for diffusion backends (latent stride)
+ * and 2 for anything that only needs yuv420p. */
+export function fitToBudget(
+  source: { width: number; height: number },
+  budgetWidth: number,
+  budgetHeight: number,
+  multiple = 2,
+): { width: number; height: number } {
+  const scale = Math.min(
+    1,
+    Math.sqrt((budgetWidth * budgetHeight) / (source.width * source.height)),
+  );
+  const quantise = (value: number): number =>
+    Math.max(multiple, Math.round((value * scale) / multiple) * multiple);
+  return { width: quantise(source.width), height: quantise(source.height) };
+}
+
 export function klingEditInput(
   prompt: string,
   videoUrl: string,
@@ -191,6 +216,10 @@ export async function prepareInpaintingControl(
   ]);
 }
 
+/** How long a generated shot is asked to be. One constant, so the stub cannot
+ * stand in for a different contract than the one the provider is given. */
+export const GENERATE_SECONDS = 4;
+
 async function stubGenerateShot(job: GenJob): Promise<string> {
   const name = job.id + "-stub-result.mp4";
   // Animated procedural clip: moving gradient + noise. Clearly a placeholder.
@@ -198,7 +227,9 @@ async function stubGenerateShot(job: GenJob): Promise<string> {
     "-f",
     "lavfi",
     "-i",
-    "gradients=s=640x360:c0=0x1a2a6b:c1=0xb03a5b:c2=0x0e7a7a:speed=0.02:d=5:r=30",
+    "gradients=s=640x360:c0=0x1a2a6b:c1=0xb03a5b:c2=0x0e7a7a:speed=0.02:d=" +
+      GENERATE_SECONDS +
+      ":r=30",
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -213,12 +244,15 @@ async function stubEditSegment(
   segmentName: string,
 ): Promise<string> {
   const name = job.id + "-stub-result.mp4";
-  // Labelled placeholder transform: hue rotation + posterise steps via eq/curves.
+  // Placeholder transform, deliberately unmistakable: a photo negative reads
+  // as "not a real result" at a glance, and it moves enough pixels that the
+  // dogfooding no-op check (tools/dogfood.ts) measures a real difference even
+  // when only the masked part of the frame survives into the composite.
   await runFfmpeg([
     "-i",
     genFilePath(segmentName),
     "-vf",
-    "hue=h=40:s=1.4,eq=saturation=1.3:contrast=1.1",
+    "negate,hue=h=40:s=1.4",
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -227,6 +261,43 @@ async function stubEditSegment(
     genFilePath(name),
   ]);
   return name;
+}
+
+// --- What the backend actually received (tools/dogfood.ts) ---
+// Every file this server hands to a generation backend goes through
+// falUploadFile or stageComfyInput, whichever backend is in play. Recording
+// it in those two places, once, is what lets a dogfooding pass measure the
+// picture the model actually saw rather than the one we meant to send: a flat
+// scale=1280:720 squashed every portrait clip into 16:9 and nothing, anywhere,
+// reported it.
+const providerInputs: string[] = [];
+
+function recordProviderInput(localPath: string): void {
+  providerInputs.push(localPath);
+  if (providerInputs.length > 500) providerInputs.splice(0, 250);
+}
+
+/** Files handed to the backend for this job, in preparation order. The first
+ * is the picture the model works from; later ones are masks, control videos
+ * or references. */
+export function providerInputsFor(jobId: string): string[] {
+  return providerInputs.filter((path) => basename(path).startsWith(jobId + "-"));
+}
+
+/** GEN_DRY_RUN=1: prepare every provider input for real, then stop at the
+ * network (or GPU) edge, so a dogfooding pass over the sample set costs
+ * nothing. The stand-in result is the prepared input put through the local
+ * stub transform, so the trim and composite stages still run on real
+ * geometry. */
+function dryRun(): boolean {
+  return process.env.GEN_DRY_RUN === "1";
+}
+
+function dryRunResult(job: GenJob): Promise<string> {
+  const prepared = providerInputsFor(job.id);
+  return prepared.length
+    ? stubEditSegment(job, basename(prepared[0]))
+    : stubGenerateShot(job);
 }
 
 export interface MaskVideoSource {
@@ -247,6 +318,8 @@ export async function falUploadFile(
   fileName: string,
   contentType = "video/mp4",
 ): Promise<string> {
+  recordProviderInput(localPath);
+  if (dryRun()) return "dry-run:" + fileName;
   return measure("generation.upload", () =>
     falUploadFileRaw(localPath, fileName, contentType),
   );
@@ -313,6 +386,7 @@ async function falSubmit(
   model: string,
   body: Record<string, unknown>,
 ): Promise<FalQueueResponse> {
+  if (dryRun()) return { request_id: "dry-run" };
   return measure("generation.submit", () => falSubmitRaw(model, body));
 }
 
@@ -377,6 +451,7 @@ async function falPollAndDownload(
   queued: FalQueueResponse,
   job: GenJob,
 ): Promise<string> {
+  if (dryRun()) return dryRunResult(job);
   return measure("generation.provider", () =>
     falPollAndDownloadRaw(model, queued, job),
   );
@@ -527,6 +602,20 @@ function comfyDir(): string {
   return process.env.COMFY_DIR || "E:\\ComfyUI";
 }
 
+/** The one hand-off point into local ComfyUI: stage a prepared file under the
+ * name its workflow template expects, and record what the graph will read. */
+function stageComfyInput(localPath: string, name: string): string {
+  recordProviderInput(localPath);
+  if (dryRun()) return name;
+  const inputDir = join(comfyDir(), "input");
+  if (!existsSync(inputDir))
+    throw new Error(
+      "ComfyUI input dir not found: " + inputDir + " (set COMFY_DIR)",
+    );
+  copyFileSync(localPath, join(inputDir, name));
+  return name;
+}
+
 function probeSize(path: string): Promise<{ width: number; height: number }> {
   return new Promise((resolvePromise, reject) => {
     execFile(
@@ -575,6 +664,7 @@ async function runComfyWorkflow(
   params: Record<string, string | number | boolean>,
   job: GenJob,
 ): Promise<string> {
+  if (dryRun()) return dryRunResult(job);
   const base = comfyUrl();
   let health: Response;
   try {
@@ -805,7 +895,7 @@ export class GenJobManager {
       const queued = await falSubmit(model, {
         prompt: job.prompt,
         resolution: "480p",
-        duration: "4",
+        duration: String(GENERATE_SECONDS),
         aspect_ratio: "16:9",
         generate_audio: false,
       });
@@ -819,6 +909,73 @@ export class GenJobManager {
           this.providerName +
           '" (expected fal or stub)',
       );
+    }
+    this.finish(job);
+  }
+
+  /** The last mile, for every backend: cut the provider's output back to the
+   * range that was asked for, and put the untouched surroundings back.
+   * The local ComfyUI backends used to return before both steps, so their
+   * results ran as long as the model's frame budget and replaced the whole
+   * frame instead of the masked subject. */
+  private async finishEdit(
+    job: GenJob,
+    generatedName: string,
+    cut: {
+      segmentName: string;
+      maskName?: string;
+      duration: number;
+      frames: number;
+      width: number;
+      height: number;
+    },
+  ): Promise<void> {
+    const rangedName = job.id + "-result-range.mp4";
+    await runFfmpeg([
+      "-i",
+      genFilePath(generatedName),
+      "-t",
+      String(cut.duration),
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-an",
+      genFilePath(rangedName),
+    ]);
+    job.files.result = rangedName;
+    // recast tracks people itself and returns a finished frame; everything
+    // else gets the surroundings restored outside the mask.
+    if (cut.maskName && job.backend !== "recast") {
+      const compositedName = job.id + "-composited.mp4";
+      const at = (index: number, label: string): string =>
+        `[${index}:v]scale=${cut.width}:${cut.height},fps=16,format=gbrp,setpts=PTS-STARTPTS[${label}];`;
+      await runFfmpeg([
+        "-i",
+        genFilePath(cut.segmentName),
+        "-i",
+        genFilePath(rangedName),
+        "-i",
+        genFilePath(cut.maskName),
+        // maskedmerge needs all three inputs at one size; scale the source
+        // too, so they match by construction instead of by luck.
+        "-filter_complex",
+        at(0, "s") + at(1, "g") + at(2, "m") +
+          "[s][g][m]maskedmerge,format=yuv420p[out]",
+        "-map",
+        "[out]",
+        "-t",
+        String(cut.duration),
+        "-frames:v",
+        String(cut.frames),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-an",
+        genFilePath(compositedName),
+      ]);
+      job.files.composited = compositedName;
     }
     this.finish(job);
   }
@@ -873,6 +1030,18 @@ export class GenJobManager {
         genFilePath(segmentName),
       ]);
       job.files.segment = segmentName;
+      // The working geometry comes from the segment ffmpeg actually produced,
+      // never from the size the caller passed: a browser that has not reported
+      // its coded size defaults to 16:9, and a rotated phone clip reports
+      // 1920x1080 while decoding to 1080x1920. Either way, pinning both sides
+      // squashed the picture for every non-16:9 clip, on every backend, and
+      // made the mask composite fail outright.
+      const probed = await probeSize(genFilePath(segmentName));
+      const { width: workWidth, height: workHeight } = fitToBudget(
+        probed,
+        targetWidth,
+        targetHeight,
+      );
       let maskName: string | undefined;
       if (mask && mask.frames.length) {
         const byFrame = new Map(mask.frames.map((f) => [f.frame, f.data]));
@@ -911,9 +1080,9 @@ export class GenJobManager {
           // replacements of room.
           "-vf",
           "scale=" +
-            targetWidth +
+            workWidth +
             ":" +
-            targetHeight +
+            workHeight +
             ",dilation,dilation,dilation,format=yuv420p",
           "-c:v",
           "libx264",
@@ -924,6 +1093,14 @@ export class GenJobManager {
         ]);
         job.files.maskVideo = maskName;
       }
+      const lastMile = {
+        segmentName,
+        maskName,
+        duration,
+        frames,
+        width: workWidth,
+        height: workHeight,
+      };
       if (job.backend === "vace-local") {
         // Local ComfyUI repertoire workflow: vace-inpainting-local.
         // Official-template settings (shift 5, CFG 6, 20 steps, uni_pc,
@@ -935,9 +1112,9 @@ export class GenJobManager {
           );
         job.state = "running";
         // Draft tier on a 12 GB GPU: undistilled 1.3B at full size/steps
-        // measured ~160 s/step (impractical). 832x480, 65 frames, 8 steps.
-        const width = 832;
-        const height = 480;
+        // measured ~160 s/step (impractical). 832x480-worth of pixels in the
+        // clip's own shape, 65 frames, 8 steps.
+        const { width, height } = fitToBudget(probed, 832, 480, 16);
         const length = 65;
         const controlName2 = job.id + "-vace-control.mp4";
         await prepareInpaintingControl(
@@ -986,29 +1163,24 @@ export class GenJobManager {
             genFilePath(refLocalName),
           ]);
         }
-        const inputDir = join(comfyDir(), "input");
-        if (!existsSync(inputDir))
-          throw new Error(
-            "ComfyUI input dir not found: " + inputDir + " (set COMFY_DIR)",
-          );
-        copyFileSync(
+        const controlFile = stageComfyInput(
           genFilePath(controlName2),
-          join(inputDir, "shouldercut-vace-control.mp4"),
+          "shouldercut-vace-control.mp4",
         );
-        copyFileSync(
+        const maskFile = stageComfyInput(
           genFilePath(maskScaledName),
-          join(inputDir, "shouldercut-vace-mask.mp4"),
+          "shouldercut-vace-mask.mp4",
         );
-        copyFileSync(
+        const vaceRefFile = stageComfyInput(
           genFilePath(refLocalName),
-          join(inputDir, "shouldercut-vace-ref.png"),
+          "shouldercut-vace-ref.png",
         );
-        job.files.result = await runComfyWorkflow(
+        const localResult = await runComfyWorkflow(
           "vace-inpainting-local",
           {
-            CONTROL_FILE: "shouldercut-vace-control.mp4",
-            MASK_FILE: "shouldercut-vace-mask.mp4",
-            REF_FILE: "shouldercut-vace-ref.png",
+            CONTROL_FILE: controlFile,
+            MASK_FILE: maskFile,
+            REF_FILE: vaceRefFile,
             POSITIVE: job.prompt,
             NEGATIVE:
               "human woman, human child, girl, boy, human skin, hair, dress, clothes, realistic human, person, worst quality, low quality, blurred details, deformed, malformed limbs, extra fingers",
@@ -1021,7 +1193,7 @@ export class GenJobManager {
           },
           job,
         );
-        this.finish(job);
+        await this.finishEdit(job, localResult, lastMile);
         return;
       }
       if (job.backend === "scail" || job.backend === "scail-animate") {
@@ -1036,8 +1208,7 @@ export class GenJobManager {
             "scail backend requires refImageUrl (the replacement character image)",
           );
         job.state = "running";
-        const width = 960;
-        const height = 544;
+        const { width, height } = fitToBudget(probed, 960, 544, 16);
         const length = 65;
         const drivingName = job.id + "-scail-driving.mp4";
         await runFfmpeg([
@@ -1091,15 +1262,18 @@ export class GenJobManager {
         } else {
           const fraction = subjectHeightFraction(mask);
           const refSize = await probeSize(genFilePath(refRawName));
-          const scaledHeight = Math.max(
-            64,
-            Math.round((fraction * height) / 0.8 / 2) * 2,
+          // One scale factor for both sides, capped by the canvas: a subject
+          // filling most of the frame used to ask for a reference taller than
+          // the canvas, and pad= refuses to shrink its input.
+          const factor = Math.min(
+            (fraction * height) / 0.8 / refSize.height,
+            width / refSize.width,
+            height / refSize.height,
           );
-          const scaledWidth = Math.max(
-            64,
-            Math.round((refSize.width * (scaledHeight / refSize.height)) / 2) *
-              2,
-          );
+          const even = (value: number): number =>
+            Math.max(64, Math.round((value * factor) / 2) * 2);
+          const scaledWidth = even(refSize.width);
+          const scaledHeight = even(refSize.height);
           await runFfmpeg([
             "-i",
             genFilePath(refRawName),
@@ -1122,18 +1296,17 @@ export class GenJobManager {
             genFilePath(refFramedName),
           ]);
         }
-        const inputDir = join(comfyDir(), "input");
-        if (!existsSync(inputDir))
-          throw new Error(
-            "ComfyUI input dir not found: " + inputDir + " (set COMFY_DIR)",
-          );
         // Stable input names: identical content re-runs hit the ComfyUI node
         // cache instead of re-rendering (jobs are sequential in practice).
-        const drivingFile = "shouldercut-driving.mp4";
-        const refFile = "shouldercut-ref.png";
-        copyFileSync(genFilePath(drivingName), join(inputDir, drivingFile));
-        copyFileSync(genFilePath(refFramedName), join(inputDir, refFile));
-        job.files.result = await runComfyWorkflow(
+        const drivingFile = stageComfyInput(
+          genFilePath(drivingName),
+          "shouldercut-driving.mp4",
+        );
+        const refFile = stageComfyInput(
+          genFilePath(refFramedName),
+          "shouldercut-ref.png",
+        );
+        const scailResult = await runComfyWorkflow(
           "scail2-character-replacement",
           {
             DRIVING_FILE: drivingFile,
@@ -1150,7 +1323,7 @@ export class GenJobManager {
           },
           job,
         );
-        this.finish(job);
+        await this.finishEdit(job, scailResult, lastMile);
         return;
       }
       if (this.providerName === "fal") {
@@ -1161,17 +1334,26 @@ export class GenJobManager {
             : undefined;
         let generatedName: string;
         if (job.backend === "kling-o3") {
-          // Kling O3 edit wants 720p-class input; upscale the prepared
-          // segment to it WITHOUT reshaping the frame. A flat scale=1280:720
+          // Kling O3 edit wants 720p-class input. A flat scale=1280:720
           // squashed a 1080x1920 phone clip into 16:9: the model was handed a
           // smeared picture, returned a 16:9 near-copy of it, and the asked-for
-          // replacement never appeared. 720 goes on the short side either way.
+          // replacement never appeared. 1280x720 is a pixel budget, like every
+          // other working size here, never a shape.
           const klingInputName = job.id + "-kling-input.mp4";
+          const klingSize = fitToBudget(
+            await probeSize(genFilePath(segmentName)),
+            1280,
+            720,
+          );
           await runFfmpeg([
             "-i",
             genFilePath(segmentName),
             "-vf",
-            "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)',fps=30,format=yuv420p",
+            "scale=" +
+              klingSize.width +
+              ":" +
+              klingSize.height +
+              ",fps=30,format=yuv420p",
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -1229,8 +1411,8 @@ export class GenJobManager {
             genFilePath(segmentName),
             genFilePath(maskName),
             genFilePath(control),
-            targetWidth,
-            targetHeight,
+            workWidth,
+            workHeight,
             frames,
           );
           job.files.controlVideo = control;
@@ -1257,67 +1439,17 @@ export class GenJobManager {
           });
           generatedName = await falPollAndDownload(model, queued, job);
         }
-        const rangedName = job.id + "-result-range.mp4";
-        await runFfmpeg([
-          "-i",
-          genFilePath(generatedName),
-          "-t",
-          String(duration),
-          "-c:v",
-          "libx264",
-          "-pix_fmt",
-          "yuv420p",
-          "-an",
-          genFilePath(rangedName),
-        ]);
-        generatedName = rangedName;
-        job.files.result = generatedName;
-        if (maskName && job.backend !== "recast") {
-          const compositedName = job.id + "-composited.mp4";
-          // Outside the SAM mask, pixels come from the original segment.
-          await runFfmpeg([
-            "-i",
-            genFilePath(segmentName),
-            "-i",
-            genFilePath(generatedName),
-            "-i",
-            genFilePath(maskName),
-            "-filter_complex",
-            "[0:v]format=gbrp,setpts=PTS-STARTPTS[s];" +
-              "[1:v]scale=" +
-              targetWidth +
-              ":" +
-              targetHeight +
-              ",fps=16,format=gbrp,setpts=PTS-STARTPTS[g];" +
-              "[2:v]scale=" +
-              targetWidth +
-              ":" +
-              targetHeight +
-              ",fps=16,format=gbrp,setpts=PTS-STARTPTS[m];" +
-              "[s][g][m]maskedmerge,format=yuv420p[out]",
-            "-map",
-            "[out]",
-            "-t",
-            String(duration),
-            "-frames:v",
-            String(frames),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-an",
-            genFilePath(compositedName),
-          ]);
-          job.files.composited = compositedName;
-        }
-        this.finish(job);
+        await this.finishEdit(job, generatedName, lastMile);
         return;
       }
       if (this.providerName !== "stub")
         throw new Error('Unknown GEN_PROVIDER "' + this.providerName + '"');
       job.state = "running";
-      job.files.result = await stubEditSegment(job, segmentName);
-      this.finish(job);
+      await this.finishEdit(
+        job,
+        await stubEditSegment(job, segmentName),
+        lastMile,
+      );
     } catch (error) {
       this.fail(job, error);
     }
