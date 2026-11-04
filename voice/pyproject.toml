@@ -1,0 +1,13 @@
+[project]
+name = "shouldercut-voice"
+version = "0.1.0"
+description = "ShoulderCut realtime voice: Meta STT, Stimm, ElevenLabs with Gemini fallback"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "livekit-agents[meta,silero,elevenlabs,google]==1.8.10",
+    "python-dotenv>=1.2.1",
+    "stimm==0.1.14",
+]
+
+[tool.uv.sources]
+stimm = { url = "https://github.com/stimm-ai/stimm/archive/5d7316b3513848b1121429a767add183f04f6036.tar.gz" }

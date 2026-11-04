@@ -4,15 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "demo": "node tools/demo.mjs",
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5173",
-    "test": "node --experimental-strip-types tools/test-export.ts"
+    "test": "node --experimental-strip-types tools/test-export.ts",
+    "diagnostics": "node tools/analyze-ux.mjs"
   },
   "dependencies": {
     "@meta-sam/parser": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@types/three": "^0.187.0",
+    "livekit-client": "^2.23.0",
+    "livekit-server-sdk": "^2.19.2",
     "mediabunny": "^1.62.1",
     "three": "^0.187.0",
     "zod": "^4.6.7"

@@ -10,7 +10,7 @@ const BRIDGE = (process.env.SHOULDERCUT_BRIDGE || 'http://127.0.0.1:5173').repla
 async function bridge(path, options = {}) {
   const response = await fetch(BRIDGE + path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-ShoulderCut-Trace': process.env.SHOULDERCUT_TRACE_ID || '', ...(options.headers || {}) },
   });
   const text = await response.text();
   let data;
@@ -183,14 +183,17 @@ server.registerTool('clear_shader_effects', {
 }, async () => asToolResult(await bridge('/api/effects/clear', { method: 'POST', body: '{}' })));
 
 server.registerTool('track_object', {
-  description: 'Track one object through the loaded clip with SAM 3.1 and make its mask available to shaders via maskAt(uv) (and maskAtParticle in particle compute). The prompt must be a short bare noun phrase (for example "red car"), never a sentence. The browser uploads its clip once; tracking takes seconds and masks then follow the object frame by frame. Call this before apply_shader_effect whenever the request mentions an object, person, or background.',
+  description: 'Track one visible object through a short passage with SAM 3.1, making its mask available to maskAt(uv). Maximum 12 seconds. For longer clips, start/end are required: ask the user for the passage if unspecified. Do not scan the whole movie. The mask is zero outside the returned range; limit the effect to that range. Use a short noun phrase such as "red car".',
   inputSchema: {
     prompt: z.string().min(1).describe('Short bare noun phrase naming the object to track.'),
+    clipId: z.string().optional().describe('Source clip id from get_project; defaults to the loaded clip.'),
+    start: z.number().nonnegative().optional().describe('Source start in seconds; required for long clips.'),
+    end: z.number().positive().optional().describe('Source end, at most 12 seconds after start.'),
   },
   annotations: { readOnlyHint: false },
 }, async (args) => asToolResult(await bridge('/api/sam/track-object', {
   method: 'POST',
-  body: JSON.stringify({ prompt: args.prompt }),
+  body: JSON.stringify(args),
 })));
 
 server.registerTool('generate_shot', {
@@ -205,10 +208,10 @@ server.registerTool('generate_shot', {
 })));
 
 server.registerTool('edit_segment', {
-  description: 'Create an asynchronous video-editing generation job over the browser current clip range: the bridge extracts the source segment and a ControlNet-style edge control video, then submits to the configured provider. For subject transformations, call track_object and show_working_preview first. Returns the job in preparing state; poll with get_generation_job.',
+  description: 'Create an asynchronous video-editing job over a loaded clip passage of at most 5 seconds. For subject transformations, call track_object over the SAME clip and range first. VACE receives neutral-gray missing pixels and the matching SAM mask. Describe the desired output scene. Submit once, then tell the user it is in progress; the application monitors completion. Do not poll in a loop or submit another equivalent job. Inspect the result before claiming the requested visual transformation succeeded.',
   inputSchema: {
     prompt: z.string().min(1).describe('Edit instruction, for example "the two children become friendly toy robots, same jumps and timing".'),
-    refImageUrl: z.string().url().optional().describe('Optional public URL of a reference image (identity/design) for the replacement. Strongly recommended for character replacement.'),
+    refImageUrl: z.string().url().optional().describe('Real public URL of a reference image. Required for recast, wan-animate and scail. Optional for kling-o3 and vace; a textual description alone is valid there. Never invent a URL.'),
     backend: z.enum(['vace', 'wan-animate', 'kling-o3', 'recast', 'scail', 'scail-animate', 'vace-local']).optional().describe('Editing backend from recommend_video_workflow. recast: hosted full character replacement (tracks people itself, no mask). scail / scail-animate: local ComfyUI repertoire workflow scail2-character-replacement, Replacement / Animation mode (frame-tracked, fixed tested settings, ~6 min, needs the local ComfyUI server). vace-local: local ComfyUI repertoire workflow vace-inpainting-local for localised masked edits (garment, prop, removal). vace (hosted) only as fallback for localised masked edits. Default: vace.'),
     subjectLabel: z.string().min(1).optional().describe('For backend scail: SAM3 detection noun for the source subject, e.g. "woman".'),
     refLabel: z.string().min(1).optional().describe('For backend scail: SAM3 detection noun for the reference character, e.g. "toy robot".'),
@@ -429,6 +432,7 @@ server.registerTool('recommend_video_workflow', {
   inputSchema: {
     request: z.string().min(1).describe('The user request, verbatim if possible.'),
     hasSourceVideo: z.boolean().optional().describe('Whether a source clip is loaded (default true).'),
+    hasReferenceImage: z.boolean().optional().describe('True only if a real reference image URL is available. A textual description is not a reference image. Default false.'),
   },
   annotations: { readOnlyHint: true },
 }, async (args) => {
@@ -445,13 +449,32 @@ server.registerTool('recommend_video_workflow', {
       : registry.techniques.find((t) => t.id === (args.hasSourceVideo === false ? 'text_to_video_insert' : 'instruction_video_edit'));
     const alternatives = scored.filter((s) => s.technique.id !== primary.id && s.score > 0).slice(0, 2).map((s) => s.technique.id);
     if (!alternatives.length && primary.id !== 'masked_inpaint_edit') alternatives.push('masked_inpaint_edit');
+    const capabilities = await bridge('/api/gen/capabilities');
+    const backendFor = (model) => model.includes('kling-video/o3') ? 'kling-o3' : model.includes('/recast') ? 'recast'
+      : model.includes('wan-vace') ? 'vace' : model.includes('animate/replace') ? 'wan-animate'
+      : model.includes('scail2') ? 'scail' : model.includes('vace-inpainting-local') ? 'vace-local'
+      : model.includes('seedance-2.0/fast/text-to-video') ? 'generate_shot' : null;
+    const candidates = primary.backends.map((b) => ({ ...b, backend: backendFor(b.model) }));
+    const eligible = candidates.filter((b) => b.backend &&
+      (b.provider === 'fal' ? capabilities.cloud : capabilities.local) &&
+      (args.hasReferenceImage === true || !['recast', 'wan-animate', 'scail'].includes(b.backend)));
+    if (!eligible.length && capabilities.cloud && args.hasSourceVideo !== false) {
+      eligible.push({ provider: 'fal', model: 'fal-ai/kling-video/o3/pro/video-to-video/edit',
+        backend: 'kling-o3', status: 'implemented', price: 'provider per-second rate' });
+    }
     const plan = {
       request: args.request,
       primaryTechnique: primary.id,
       name: primary.name,
       why: best && best.score > 0 ? 'Matched cues: ' + best.hits.join(', ') : 'No strong cue match; default routing for ' + (args.hasSourceVideo === false ? 'generation without source footage' : 'editing loaded footage'),
       steps: primary.workflow,
-      backendsInOrder: primary.backends.map((b) => ({ provider: b.provider, model: b.model, status: b.status, price: b.price, ranking: b.ranking })),
+      constraints: ['Only choose from backendsInOrder: these have usable inputs and a running provider.',
+        'Without a reference photo use kling-o3 for textual character replacement, or vace with a SAM mask for local edits. Ignore reference-image steps when optional.',
+        'Never invent an image URL or mention @Image1 without supplying an image.',
+        'A rejected request with retryable:false needs changed inputs; never repeat it unchanged.',
+        'Submit one job then report it as in progress. Do not poll repeatedly or submit a second job while it runs.'],
+      backendsInOrder: eligible,
+      unavailableBackends: candidates.filter((b) => !eligible.some((e) => e.model === b.model)).map((b) => b.model),
       guidance: primary.guidance,
       economicalTest: primary.economicalTest,
       risks: primary.risks,

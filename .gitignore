@@ -12,3 +12,5 @@ server/gen-output/
 server/clip-store/
 *.log
 .DS_Store
+__pycache__/
+.runtime/

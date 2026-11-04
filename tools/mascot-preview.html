@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShoulderCut · Atelier de Muse</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090b12;color:#eaf2ef;font:14px system-ui;min-height:100vh;display:grid;place-content:center;gap:20px;text-align:center}h1{font-size:18px;margin:0}p{color:#8d9d9a;margin:6px}canvas{width:min(620px,90vw);height:min(540px,65vh);display:block}nav{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}button{font:inherit;background:#171e29;color:inherit;border:1px solid #34433e;border-radius:30px;padding:9px 16px;cursor:pointer}button[aria-pressed=true]{background:#a9e5c3;color:#102619}a{color:#a9e5c3}
+</style>
+<header><h1>Muse, ton petit monteur</h1><p>Les gestes de la conversation.</p></header>
+<canvas id="muse"></canvas>
+<nav><button data-state="idle">Au repos</button><button data-state="listening">À l’écoute</button><button data-state="speaking">Elle parle</button><button data-state="thinking">Au travail</button><button data-state="done">C’est fait !</button><button data-state="error">Oups</button></nav>
+<p><a href="/">Retour à l’éditeur</a></p>
+<script type="module" src="./mascot-preview.ts"></script>

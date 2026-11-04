@@ -1,0 +1,33 @@
+{
+  "numbers": {
+    "zero": 0,
+    "un": 1,
+    "une": 1,
+    "deux": 2,
+    "trois": 3,
+    "quatre": 4,
+    "cinq": 5,
+    "six": 6,
+    "sept": 7,
+    "huit": 8,
+    "neuf": 9,
+    "dix": 10
+  },
+  "rules": [
+    {
+      "pattern": "^(?:mets(?: la video)? en pause|pause(?: la video)?|arrete la lecture)$",
+      "action": "pause",
+      "reply": "Je mets en pause."
+    },
+    {
+      "pattern": "^(?:reprends(?: la lecture)?|lance la (?:lecture|video)|lis la video)$",
+      "action": "play",
+      "reply": "Je lance la lecture."
+    },
+    {
+      "pattern": "^(?:mets|place|va)(?: (?:la video|le curseur))? a ([0-9]+(?:[.,][0-9]+)?|zero|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix) (?:secondes?|s)$",
+      "action": "seek",
+      "reply": "Je te montre ce passage."
+    }
+  ]
+}

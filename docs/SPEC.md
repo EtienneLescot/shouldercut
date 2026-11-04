@@ -1,5 +1,31 @@
 # ShoulderCut — Product & Technical Specification
 
+> **Nov 3 implementation update:** realtime voice has been restored in
+> `voice/agent.py` and `src/voice.ts`. The browser connects through LiveKit
+> Cloud to a local, explicitly dispatched `shouldercut` worker. Meta Muse
+> Voice performs streaming STT; imported `stimm==0.1.14` connects complete
+> turns to the existing Muse editing supervisor through an independent
+> sequential queue. A small Muse Spark conversation model now handles
+> questions and natural acknowledgements separately; only explicit edit
+> tool calls enter that queue. Stimm is pinned to the digital-twin example's
+> Oct 10 commit `5d7316b3513848b1121429a767add183f04f6036`, including its
+> streaming completion fix. ElevenLabs supplies speech with an optional
+> Gemini fallback; Gemini can also be used alone. Recorded commands remain
+> a fallback. The central mascot has independent listening/speaking/work
+> gestures using the original Jolly GLB as a continuous mesh: it faces the
+> viewer while waiting, turns away while working and moves its arms subtly.
+> There is no desk or computer.
+> Spark 1.2 handles conversation; Wonder handles queued editing in an
+> isolated Muse preset with tool progress. Speculative partial replies
+> never speak or edit before a final transcript. SAM tracking is bounded
+> to explicit excerpts of at most 12 seconds, avoiding whole-clip timeouts.
+> Hosted VACE now receives neutral-gray missing pixels and a mask tied to
+> the source clip/range. Draft generation is limited to 5 seconds, returns
+> the composited result, and keeps the mascot working until completion.
+> This supersedes the Nov 2 descriptions below of push-to-talk as the only
+> voice path and of Stimm not being imported. The dated decisions remain
+> as the build history. Current setup and checks are in the README.
+
 Meta Global AI Developer Hackathon, Indie Developer track.
 Building period: Oct 27 – Nov 4, 2026. Submission deadline: Nov 4, 21:00 ET.
 Problem statement: **Build for Your World**.
@@ -173,30 +199,35 @@ P2: beat-cut on music, multi-track audio.
 
 ### 2.3 Interface (thin by design)
 
-One screen, and almost nothing on it: the video fills the frame, a single
-Talk button sits under it, and Muse — Meta's mascot, rebuilt as a small
-Three.js figure (§0: the character is Meta's, the model is ours) — waits
-in the corner, turning its head while it has nothing to do. Everything else
-(project, playback, transcript, tracking, shaders, export) lives in a
-drawer behind one Controls button, closed by default.
+The main page contains the video, a thin play/scrub/time bar, import/export,
+and one conversation area with Muse and a microphone button. The palette is
+anthracite, off-white and restrained blue, inspired by Meta's Muse Code page.
+The technical drawer, decoder readouts, manual tracking form and shader cards
+are removed. Microphone/export options and conversation history are secondary
+popovers. The layout adapts to narrow screens without overlapping controls.
 
-The whole interface runs off one state — idle, listening, thinking, done,
-error — set on the document and read by CSS, so feedback costs no
-per-frame JavaScript: the accent colour shifts, the button breathes then
-pulses with the live microphone envelope, a hairline travels around the
-frame while Muse writes WGSL, and a light sweep crosses the picture when a
-command lands. The mascot reads the same state: it scans the room when
-idle, locks on while listening with its cheeks warming to the mic level,
-and drops its head over the work with narrowed eyes while it edits.
+The original Jolly mesh remains continuous. It faces the viewer while waiting,
+turns its back toward the viewer while working, and moves its hands subtly.
+Working state includes real pending generation, not only the editing LLM turn.
+There is no computer or desk. Reduced-motion preferences suppress idle motion.
 
-Voice is push-to-talk, not an always-open room (§13): hold Talk, speak,
-release; the browser records with `MediaRecorder`, the bridge transcribes
-with Muse Voice Transcribe and feeds the text into the same supervisor
-path as a typed command, with full tool parity. The agent answers in the
-reply line and speaks its first sentence back through the browser's own
-speech synthesis. Chat input mirrors voice for
-noisy rooms and as the demo backup path. No settings pages, no effect
-browser panels: effects are requested, not browsed.
+A click opens a LiveKit conversation through Stimm; speech is streamed rather
+than recorded turn by turn. A separate Spark conversation model acknowledges
+requests. Voice and typed chat share the tool contract in
+`shared/conversation.json`. Playback is executed directly and acknowledged by
+the actual browser player; it never enters the slow editing queue. A visual
+search samples 12 chronological frames of the open clip, refines matches on
+long clips, and seeks to the matching sample. Events between samples can be
+missed: an inconclusive result leaves playback where it was.
+
+“Détoure la femme” produces a SAM preview from a 0.25-second excerpt at the
+playhead. Its canvas overlay highlights the subject and dims the background;
+it never changes the shader stack, an existing effect's mask, or the export.
+A later replacement/edit request goes to the editing specialist, which tracks
+the full requested range before editing. Actual masks restore when reopening
+the clip. Results and meaningful progress stay beside the conversation, without
+requiring a manual tracking interface. Recorded single commands remain an audio
+fallback inside the options menu; typed chat is always available.
 
 ## 3. Rendering architecture: copy budget
 
