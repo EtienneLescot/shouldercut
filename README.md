@@ -10,6 +10,71 @@ with every check green: 42 node tests, 19 voice tests, a clean typecheck
 and a green build.
 Specification: [docs/SPEC.md](docs/SPEC.md), kept current with the build.
 
+## Run it
+
+ShoulderCut is a local-first desktop tool, on purpose: it holds your footage
+on your machine, runs ffmpeg there, and can drive a ComfyUI on your own GPU
+so that generation costs nothing. There is no hosted instance to sign into,
+and no API key ever reaches the browser.
+
+**You need:** Node 22+, `ffmpeg` and `ffprobe` on PATH, and — for voice
+only — [uv](https://docs.astral.sh/uv/). An NVIDIA GPU with
+[ComfyUI](https://github.com/comfyanonymous/ComfyUI) is optional: without
+one, generation runs on hosted providers instead.
+
+```bash
+git clone https://github.com/EtienneLescot/shouldercut && cd shouldercut
+npm install
+cp .env.example .env     # then fill in the keys below
+npm run demo
+```
+
+`npm run demo` starts the editor on 5173 and, if configured, the LiveKit
+server and the voice worker, then prints the URL. `npm run dev` starts the
+editor alone.
+
+### Which keys, and which you can skip
+
+Every key goes in `.env`, which is gitignored. `.env.example` lists them all
+with a comment each.
+
+| Key | Needed for | Where |
+| --- | --- | --- |
+| `MODEL_API_KEY` | **Required.** SAM 3.1 masks, voice commands, captions | Meta Model API |
+| `MUSE_API_KEY` | **Required** unless the Muse CLI is already logged in | Muse |
+| `FAL_KEY` | Hosted generation. Skip it if you run ComfyUI locally | [fal.ai](https://fal.ai) |
+| `ELEVEN_API_KEY` | The mascot's voice | [elevenlabs.io](https://elevenlabs.io) |
+| `GOOGLE_API_KEY` | TTS fallback when ElevenLabs is out of quota | [AI Studio](https://aistudio.google.com) |
+| `LIVEKIT_*` | Voice transport | LiveKit Cloud, or the local `--dev` server |
+| `COMFY_URL` | A ComfyUI that is not on `127.0.0.1:8188` | — |
+
+Typing to the editor needs the first two. Everything else is additive:
+no `ELEVEN_API_KEY` means no voice, not a broken app.
+
+### What it costs
+
+Generation is the only thing that bills. Measured by `tools/dogfood.ts` over
+one full pass of three clips:
+
+| Backend | Where | One pass |
+| --- | --- | --- |
+| `vace-local`, `scail`, `scail-animate` | your GPU | **free** |
+| `vace`, `wan-animate` | fal.ai | $0.61 |
+| `kling-o3` | fal.ai | $2.55 |
+| `recast` | fal.ai | $4.56 |
+
+`GEN_DRY_RUN=1` prepares every provider input for real and submits nothing,
+which is how the harness stays free.
+
+### Checks
+
+```bash
+npx tsc --noEmit      # typecheck
+npm test              # 42 node tests
+npm run test:voice    # 19 python tests
+npm run build
+```
+
 ## Built during the hackathon
 
 Everything in this repository is written from scratch during the event
@@ -153,8 +218,8 @@ npm install
 npm run dev
 ```
 
-Checks: `npm run build` typechecks and builds, `npm test` runs the
-export regression check (needs `ffmpeg` and `ffprobe` on PATH).
+See **Run it → Checks** above. The node tests need `ffmpeg` and `ffprobe`
+on PATH.
 
 Then open http://127.0.0.1:5173/ in Chrome or Edge, drag in a local
 MP4/WebM file, and ask in chat for any effect (for example
@@ -163,7 +228,7 @@ Muse (`muse exec`) with the `shouldercut-fx` MCP server; the agent
 writes WGSL against `docs/fx-interface.md`, and the browser compiles it
 live. Muse must be installed and logged in on this machine.
 
-Voice: click **Parler** once, then speak freely. Click the microphone again
+Voice: click **Talk** once, then speak freely. Click the microphone again
 to end the call. The selected microphone is shared by realtime voice and
 the recorded-command fallback in audio options. Change the microphone between calls.
 
