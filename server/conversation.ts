@@ -85,6 +85,7 @@ export async function metaCompletion(
   messages: unknown[],
   tools: unknown[],
   timeout = 15_000,
+  toolChoice?: "required",
 ): Promise<Record<string, any>> {
   const key =
     process.env.MODEL_API_KEY ||
@@ -104,18 +105,75 @@ export async function metaCompletion(
       parallel_tool_calls: false,
       reasoning_effort: "minimal",
       max_completion_tokens: 768,
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
     }),
     signal: AbortSignal.timeout(timeout),
   });
   if (!response.ok)
     throw new Error(
-      "Le dialogue Meta ne répond pas (HTTP " + response.status + ").",
+      "Le dialogue Meta ne répond pas (HTTP " +
+        response.status +
+        "). " +
+        // Without the body a 400 says nothing about which field it refused.
+        (await response.text().catch(() => "")).slice(0, 300),
     );
   const data = (await response.json()) as any;
   const message = data.choices?.[0]?.message;
   if (!message) throw new Error("Réponse Meta vide.");
   return message;
 }
+// The instructions tell the model that a tool announces a future action, so a
+// plain reply that announces one contradicts them: it promises an edit that
+// was never queued, and the user waits for something that never started.
+// Measured twice on the same request, phrased differently each time: "je
+// prépare l'effet sur tout le clip", then "film argentique en préparation,
+// grain et contrastes accentués à venir". Forcing a tool call would be the
+// clean fix, but the API answers: only "auto" is supported for tool_choice.
+// So: catch the promise, correct the model once, and if it still will not
+// call a tool, hand the request to the editor rather than drop it.
+/**
+ * Does this request ask for the video to change?
+ *
+ * The fast model sometimes answers a plain edit request in prose instead of
+ * calling `enqueue_edit`, and then nothing is queued while the user is told
+ * work has started. Matching the promise in the reply does not work: the same
+ * request produced "je prépare l'effet", "en préparation ... à venir" and
+ * "je le prépare" on three runs, and a pattern that catches all three catches
+ * ordinary conversation too. Forcing the tool call would settle it, but the
+ * API refuses: only "auto" is supported for tool_choice.
+ *
+ * So ask the narrow question instead. Picking one tool out of five is a
+ * harder call than answering yes or no about the user's own words, and this
+ * judgement does not depend on how the first reply happened to be phrased.
+ * It runs only when no tool was called, so ordinary chat pays for it once and
+ * an edit that was about to be dropped is recovered.
+ */
+async function asksForAnEdit(text: string): Promise<boolean> {
+  try {
+    const verdict = await metaCompletion(
+      [
+        {
+          role: "developer",
+          content:
+            "Réponds par un seul mot : oui ou non. La demande porte-t-elle " +
+            "sur une modification de la vidéo (couper, réordonner, effet, " +
+            "sous-titres, détourage suivi, remplacement, export, annuler) ? " +
+            "Une salutation, un remerciement, une question sur tes capacités " +
+            "ou sur l’état du montage : non. Une demande d’aperçu seul : non.",
+        },
+        { role: "user", content: text },
+      ],
+      [],
+      8_000,
+    );
+    return /^\W*oui/i.test(String(verdict.content || ""));
+  } catch {
+    // This is a safety net, never a gate: a failure here must not swallow
+    // the reply the user is already waiting for.
+    return false;
+  }
+}
+
 export async function planConversation(
   text: string,
   history: { role: string; text: string }[],
@@ -123,8 +181,7 @@ export async function planConversation(
 ): Promise<Decision> {
   const instant = quickPlayback(text);
   if (instant) return instant;
-  const message = await metaCompletion(
-    [
+  const prompt = [
       {
         role: "developer",
         content:
@@ -135,12 +192,15 @@ export async function planConversation(
         content: m.text,
       })),
       { role: "user", content: text },
-    ],
-    config.tools,
-  );
+    ];
+  const message = await metaCompletion(prompt, config.tools);
   const calls = message.tool_calls || [];
   if (!calls.length) {
     if (!message.content?.trim()) throw new Error("Réponse de dialogue vide.");
+    // No tool: either genuine conversation, or an edit request the model
+    // answered in prose. Only the second needs rescuing.
+    if (await asksForAnEdit(text))
+      return { reply: message.content.trim(), edit: true };
     return { reply: message.content.trim() };
   }
   if (calls.length !== 1)

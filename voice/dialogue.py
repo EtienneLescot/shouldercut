@@ -56,6 +56,23 @@ class MetaDialogue:
             record('dialogue.reply', model=self.model, status='error', code=type(exc).__name__, elapsed_ms=round((time.monotonic() - started) * 1000))
             raise
 
+    async def _complete(self, messages: list[dict], key: str | None, started: float) -> dict:
+        body = {
+            "model": self.model,
+            "messages": messages, "tools": TOOLS, "parallel_tool_calls": False,
+            # The cap includes invisible reasoning tokens as well as the short
+            # spoken reply. 200 occasionally truncates before any visible text.
+            "reasoning_effort": "minimal", "max_completion_tokens": 768,
+        }
+        async with self.http.post(self.url, headers={"Authorization": "Bearer " + (key or "")},
+                                  json=body, timeout=aiohttp.ClientTimeout(total=12)) as response:
+            if response.status != 200:
+                raise RuntimeError(f"Le dialogue Meta ne répond pas (HTTP {response.status}).")
+            data = await response.json()
+        record('dialogue.model', model=self.model,
+               elapsed_ms=round((time.monotonic() - started) * 1000), status='ok')
+        return data['choices'][0]['message']
+
     async def _reply(self, text: str, history: list[dict[str, str]], status: dict) -> Reply:
         instant = quick_playback(text)
         if instant:
@@ -78,18 +95,7 @@ class MetaDialogue:
         messages.append({"role": "user", "content": text})
         key = os.getenv("MODEL_API_KEY") or os.getenv("META_API_KEY") or os.getenv("MUSE_API_KEY")
         started = time.monotonic()
-        async with self.http.post(self.url, headers={"Authorization": "Bearer " + (key or "")}, json={
-            "model": self.model,
-            "messages": messages, "tools": TOOLS, "parallel_tool_calls": False,
-            # The cap includes invisible reasoning tokens as well as the short
-            # spoken reply. 200 occasionally truncates before any visible text.
-            "reasoning_effort": "minimal", "max_completion_tokens": 768,
-        }, timeout=aiohttp.ClientTimeout(total=12)) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Le dialogue Meta ne répond pas (HTTP {response.status}).")
-            data = await response.json()
-        record('dialogue.model', model=self.model, elapsed_ms=round((time.monotonic() - started) * 1000), status='ok')
-        message = data['choices'][0]['message']
+        message = await self._complete(messages, key, started)
         calls = message.get('tool_calls') or []
         if calls:
             if len(calls) != 1 or calls[0]['function']['name'] not in {t['function']['name'] for t in TOOLS}:
@@ -112,4 +118,30 @@ class MetaDialogue:
         spoken = message.get('content')
         if not isinstance(spoken, str) or not spoken.strip():
             raise ValueError("Empty conversation reply")
+        # No tool: either genuine conversation, or an edit the model answered
+        # in prose. See server/conversation.ts asksForAnEdit for why the reply
+        # text cannot decide this and tool_choice cannot force it.
+        if await self._asks_for_an_edit(text, key, started):
+            record('dialogue.rescued_edit', model=self.model)
+            return Reply(spoken.strip(), text.strip())
         return Reply(spoken.strip())
+
+    async def _asks_for_an_edit(self, text: str, key: str | None, started: float) -> bool:
+        """Does this request ask for the video to change? Yes or no is a far
+        easier call for the model than picking one tool out of five, and it
+        does not depend on how the first reply happened to be phrased."""
+        try:
+            verdict = await self._complete([
+                {"role": "developer", "content":
+                 "Réponds par un seul mot : oui ou non. La demande porte-t-elle "
+                 "sur une modification de la vidéo (couper, réordonner, effet, "
+                 "sous-titres, détourage suivi, remplacement, export, annuler) ? "
+                 "Une salutation, un remerciement, une question sur tes capacités "
+                 "ou sur l’état du montage : non. Une demande d’aperçu seul : non."},
+                {"role": "user", "content": text},
+            ], key, started)
+        except Exception:
+            # A safety net, never a gate: a failure here must not swallow the
+            # reply the user is already waiting for.
+            return False
+        return bool(re.match(r"\W*oui", str(verdict.get('content') or ''), re.IGNORECASE))

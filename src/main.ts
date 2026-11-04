@@ -1,6 +1,7 @@
 import "./style.css";
 import { setupRealtimeVoice } from "./voice";
 import { createMascot, type MascotState } from "./mascot";
+import { createWorkTrail } from "./worktrail";
 import type {
   PlayerState,
   ShaderEffectDefinition,
@@ -82,6 +83,9 @@ let currentFile: File | null = null;
 
 // --- UI state: one string drives the button, the stage and the mascot ---
 const muse = createMascot(museCanvas);
+const trail = createWorkTrail(
+  document.querySelector<HTMLElement>("#workTrail")!,
+);
 let voiceWorking = false,
   supervisorWorking = false,
   generationWorking = false,
@@ -595,11 +599,18 @@ function connectBridge(): void {
       working: boolean;
       phase?: string;
     };
+    const wasWorking = supervisorWorking;
     supervisorWorking = Boolean(progress.working);
     updateWorking();
     agentStatus!.textContent = supervisorWorking
       ? (progress.phase || "Muse travaille sur la vidéo") + "…"
       : "À votre écoute";
+    // Every tool the agent calls reaches us here. Lay them out as they
+    // arrive instead of overwriting one line, so the wait has a shape.
+    const label = progress.phase || "Muse travaille sur la vidéo";
+    if (supervisorWorking && !wasWorking) trail.begin(label);
+    else if (supervisorWorking) trail.step(label);
+    else if (wasWorking) trail.end();
   });
   events.addEventListener("assistant-action", (event) => {
     const p = JSON.parse((event as MessageEvent<string>).data);
@@ -633,6 +644,8 @@ function connectBridge(): void {
     };
     pendingEffects.set(payload.requestId, payload.effect);
     agentStatus!.textContent = "Préparation de l’effet…";
+    // The shader Muse just wrote, shown for a beat as it lands.
+    if (!payload.dryRun && payload.effect.code) trail.code(payload.effect.code);
     send({
       type: "upsertEffect",
       requestId: payload.requestId,
