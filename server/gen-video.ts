@@ -1161,13 +1161,17 @@ export class GenJobManager {
             : undefined;
         let generatedName: string;
         if (job.backend === "kling-o3") {
-          // Kling O3 edit wants 720p-class input; upscale the prepared segment.
+          // Kling O3 edit wants 720p-class input; upscale the prepared
+          // segment to it WITHOUT reshaping the frame. A flat scale=1280:720
+          // squashed a 1080x1920 phone clip into 16:9: the model was handed a
+          // smeared picture, returned a 16:9 near-copy of it, and the asked-for
+          // replacement never appeared. 720 goes on the short side either way.
           const klingInputName = job.id + "-kling-input.mp4";
           await runFfmpeg([
             "-i",
             genFilePath(segmentName),
             "-vf",
-            "scale=1280:720,fps=30,format=yuv420p",
+            "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)',fps=30,format=yuv420p",
             "-c:v",
             "libx264",
             "-pix_fmt",
