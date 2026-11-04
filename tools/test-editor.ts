@@ -1,5 +1,6 @@
 // Regression checks for the timeout and partial-result failure modes.
 // Run: node --experimental-strip-types --test tools/test-editor.ts
+import { readFileSync } from "node:fs";
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MuseEvents, museArgs } from '../server/muse-runner.ts';
@@ -53,4 +54,32 @@ test('excerpt masks align with source time and stop outside the passage', () => 
   assert.equal(track.frames[3].ones, 0);
   assert.equal(track.frames[1].ones, 2);
   assert.equal(track.start, 10);
+});
+
+// The Muse CLI launches the MCP server with an environment of its own, so
+// anything that server reads has to be declared in the mcpServers block.
+// It was not, and the failures landed far from the cause: no access key
+// meant the editor answered 401 to its own tool calls, and no bridge URL
+// meant a fallback to http://127.0.0.1:5173 and "fetch failed" as soon as
+// the server listened anywhere else.
+
+test("the MCP server is handed every variable it reads", () => {
+  const source = readFileSync(
+    new URL("../server/shouldercut-mcp.mjs", import.meta.url),
+    "utf8",
+  );
+  const runner = readFileSync(
+    new URL("../server/muse-runner.ts", import.meta.url),
+    "utf8",
+  );
+  const declared = runner.slice(runner.indexOf("function mcpEnv("));
+  const read = new Set(
+    [...source.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]),
+  );
+  assert.ok(read.size >= 3, "the scan found the env reads");
+  for (const name of read)
+    assert.ok(
+      declared.includes(name),
+      name + " is read by the MCP server but never passed to it",
+    );
 });

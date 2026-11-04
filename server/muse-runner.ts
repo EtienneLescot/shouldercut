@@ -107,9 +107,38 @@ export function museArgs(options: MuseRunOptions): string[] {
         args: [options.mcpScript],
         mode: "required",
         enabled: true,
+        // The CLI launches this server with an environment of its own, not
+        // ours, so anything it needs has to be declared right here. It is
+        // not obvious and it fails far away: without the key the editor
+        // answers 401 to its own tool calls, and without the bridge URL it
+        // falls back to http://127.0.0.1:5173 and reports "fetch failed"
+        // the moment the server is anywhere else. Both looked like network
+        // faults and neither was.
+        //
+        // mcpEnv is the whole list the server reads, so a variable added
+        // there is added here, in one place, and nothing silently defaults.
+        env: mcpEnv(),
       }),
     options.prompt,
   ];
+}
+
+/** Every variable server/shouldercut-mcp.mjs reads, passed by reference. */
+function mcpEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of [
+    "SHOULDERCUT_ACCESS_KEY",
+    "SHOULDERCUT_BRIDGE",
+    "SHOULDERCUT_TRACE_ID",
+  ]) {
+    // A reference, never the value. The CLI refuses a literal secret in
+    // -c ("secret leaves need exactly one whole-value ${VAR}") and it is
+    // right to: the value would sit in the command line for anyone
+    // reading the process table. The CLI resolves these from its own
+    // environment, which the spawn below hands it in full.
+    if (process.env[name]) env[name] = "${" + name + "}";
+  }
+  return env;
 }
 
 function stopTree(child: ChildProcessWithoutNullStreams): Promise<void> {
