@@ -21,7 +21,7 @@ from livekit.agents import AgentServer, AgentSession, JobContext, llm, tts, APIC
 from livekit.plugins import elevenlabs, google, meta, silero
 from stimm import Supervisor, TranscriptMessage, VoiceAgent
 from dialogue import MetaDialogue
-from diagnostics import record, trace_id
+from diagnostics import bridge_headers, record, trace_id
 from tts_health import QuotaAwareGeminiTTS, unavailable, public_voice_error
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -179,7 +179,7 @@ class EditingSupervisor(Supervisor):
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=150)) as http:
                 async with http.post(BRIDGE + '/api/assistant/action', json=action,
-                                     headers={'X-ShoulderCut-Trace': trace_id.get() or ''}) as response:
+                                     headers=bridge_headers()) as response:
                     data = await response.json()
                     if response.status != 200 or not data.get('ok'):
                         raise RuntimeError(data.get('message', 'The action failed.'))
@@ -207,7 +207,7 @@ class EditingSupervisor(Supervisor):
                     await self.emit("editing", text=text)
                     async with http.post(BRIDGE + "/api/voice/supervise", json={
                         "message": text, "history": self.edit_history[-24:],
-                    }, headers={'X-ShoulderCut-Trace': turn_id or ''}) as response:
+                    }, headers=bridge_headers(turn_id)) as response:
                         data = await response.json()
                         if response.status != 200 or not data.get("ok"):
                             raise RuntimeError(data.get("message", "The edit failed."))

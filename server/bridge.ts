@@ -1,4 +1,12 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
+import {
+  ACCESS_COOKIE,
+  ACCESS_HEADER,
+  accessVerdict,
+  readCookie,
+  sameOrigin,
+  ungated,
+} from "./access.ts";
 import { measure, record, traceId, withTrace } from "./diagnostics.ts";
 import { loadSession, saveSession } from "./session-store.ts";
 import { AgentDispatchClient, RoomServiceClient } from "livekit-server-sdk";
@@ -173,10 +181,12 @@ async function readJson(
     unknown
   >;
 }
+function firstHeader(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
 function originAllowed(req: IncomingMessage): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  return /^http:\/\/(127\.0\.0\.1|localhost):5173$/.test(origin);
+  return sameOrigin(req.headers.origin, req.headers.host);
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -1614,8 +1624,44 @@ export function shouldercutBridge(): Plugin {
         process.env[key] ??= value;
       }
       server.middlewares.use((req, res, next) => {
-        const pathname = new URL(req.url || "/", "http://127.0.0.1:5173")
-          .pathname;
+        const asked = new URL(req.url || "/", "http://127.0.0.1:5173");
+        const verdict = ungated(asked.pathname)
+          ? "open"
+          : accessVerdict(process.env.SHOULDERCUT_ACCESS_KEY, {
+              query: asked.searchParams.get("key"),
+              header: firstHeader(req.headers[ACCESS_HEADER]),
+              cookie: readCookie(req.headers.cookie, ACCESS_COOKIE),
+            });
+        if (verdict === "grant") {
+          // Trade the link for a cookie, then bounce to the same page
+          // without the key in it, so the secret leaves the address bar,
+          // the referrer and the browser history on first load.
+          asked.searchParams.delete("key");
+          res.setHeader(
+            "Set-Cookie",
+            [
+              ACCESS_COOKIE +
+                "=" +
+                encodeURIComponent(process.env.SHOULDERCUT_ACCESS_KEY!.trim()),
+              "Path=/",
+              "HttpOnly",
+              "SameSite=Lax",
+              "Max-Age=43200",
+            ].join("; "),
+          );
+          res.writeHead(302, { Location: asked.pathname + asked.search });
+          res.end();
+          return;
+        }
+        if (verdict === "deny") {
+          res.writeHead(401, {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-store",
+          });
+          res.end("This ShoulderCut editor needs an access key.\n");
+          return;
+        }
+        const pathname = asked.pathname;
         if (!pathname.startsWith("/api/")) {
           next();
           return;

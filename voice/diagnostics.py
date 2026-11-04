@@ -1,5 +1,6 @@
 """Bounded, asynchronous local latency journal. No transcript or credentials."""
 import atexit
+import os
 import contextvars
 import json
 import logging
@@ -16,6 +17,22 @@ _allowed = {'traceId', 'sessionId', 'role', 'messageId', 'model', 'provider', 'a
             'end_of_turn_delay_ms', 'tts_node_ttfb_ms', 'e2e_latency_ms', 'ttfb_ms',
             'on_user_turn_completed_delay_ms', 'playback_latency_ms', 'llm_node_ttft_ms',
             'pending', 'editing', 'http_status'}
+
+ACCESS_HEADER = 'X-ShoulderCut-Key'
+
+def bridge_headers(trace=None):
+    """Headers for every call to the local editor API.
+
+    The editor gates all of its routes once SHOULDERCUT_ACCESS_KEY is set,
+    which is what makes it safe to put on a tunnel. The voice agent is not a
+    browser: it has no cookie to be handed, so it presents the key itself.
+    With no key set this is the trace header it always was.
+    """
+    headers = {'X-ShoulderCut-Trace': trace or trace_id.get() or ''}
+    key = (os.getenv('SHOULDERCUT_ACCESS_KEY') or '').strip()
+    if key:
+        headers[ACCESS_HEADER] = key
+    return headers
 
 def record(stage, **fields):
     global _logger

@@ -201,9 +201,16 @@ const MAX_CLIP_BYTES = 128 * 1024 * 1024;
 /** Base videos already on disk: the ones the project references, newest
  * first, otherwise whatever is in the clip store. Oversized sources are
  * skipped — a pass is meant to be cheap enough to run on every change. */
+/** The key the editor asks for when it is reachable from outside this
+ * machine. Unset locally, where there is nothing to gate. */
+function accessKey(): Record<string, string> {
+  const key = (process.env.SHOULDERCUT_ACCESS_KEY || "").trim();
+  return key ? { "X-ShoulderCut-Key": key } : {};
+}
 async function sampleClips(limit: number): Promise<string[]> {
   const fromProject = await fetch("http://127.0.0.1:5173/api/project", {
     signal: AbortSignal.timeout(3000),
+    headers: accessKey(),
   })
     .then((r) => r.json() as Promise<{ project?: { clips?: { hash?: string }[] } }>)
     .then((body) => (body.project?.clips ?? []).map((c) => c.hash).filter(Boolean) as string[])

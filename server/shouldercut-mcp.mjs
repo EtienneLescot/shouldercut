@@ -6,11 +6,18 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BRIDGE = (process.env.SHOULDERCUT_BRIDGE || 'http://127.0.0.1:5173').replace(/\/$/, '');
+// The editor gates every route once SHOULDERCUT_ACCESS_KEY is set, which is
+// what lets it be reached from outside this machine. This server is not a
+// browser and never gets a cookie, so it presents the key on each call.
+const accessHeader = () => {
+  const key = (process.env.SHOULDERCUT_ACCESS_KEY || '').trim();
+  return key ? { 'X-ShoulderCut-Key': key } : {};
+};
 
 async function bridge(path, options = {}) {
   const response = await fetch(BRIDGE + path, {
     ...options,
-    headers: { 'Content-Type': 'application/json', 'X-ShoulderCut-Trace': process.env.SHOULDERCUT_TRACE_ID || '', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-ShoulderCut-Trace': process.env.SHOULDERCUT_TRACE_ID || '', ...accessHeader(), ...(options.headers || {}) },
   });
   const text = await response.text();
   let data;

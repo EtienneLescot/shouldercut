@@ -5,7 +5,7 @@ import os
 import time
 import re
 import unicodedata
-from diagnostics import record
+from diagnostics import bridge_headers, record
 
 import aiohttp
 
@@ -81,7 +81,7 @@ class MetaDialogue:
         context_started = time.monotonic()
         if self.url == 'https://api.meta.ai/v1/chat/completions':
             try:
-                async with self.http.get(os.getenv('SHOULDERCUT_BRIDGE', 'http://127.0.0.1:5173') + '/api/assistant/context', timeout=aiohttp.ClientTimeout(total=1)) as response:
+                async with self.http.get(os.getenv('SHOULDERCUT_BRIDGE', 'http://127.0.0.1:5173') + '/api/assistant/context', headers=bridge_headers(), timeout=aiohttp.ClientTimeout(total=1)) as response:
                     if response.status == 200:
                         actual = await response.json()
                         status = {**actual, **status, 'edit_in_progress':
