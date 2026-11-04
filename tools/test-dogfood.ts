@@ -3,7 +3,8 @@
 // No ffmpeg: both pieces under test are pure.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fitToBudget } from "../server/gen-video.ts";
+import {
+  rangeShortfall, fitToBudget } from "../server/gen-video.ts";
 import { ASPECT_TOLERANCE, PSNR_NO_OP_DB, checkTrial, type Probe, type Trial } from "./dogfood.ts";
 
 const probe = (width: number, height: number, seconds = 5.06, fps = 16): Probe => ({
@@ -101,4 +102,49 @@ test("a backend that was handed nothing, or returned nothing, is not a pass", ()
     checkTrial({ ...goodTrial(), kind: "generate", segment: null, clip: null, uploaded: null, psnrDb: null, requestedSeconds: 3 }),
     [],
   );
+});
+
+// The bug these guard: finishEdit cuts the backend's output back to the
+// requested range with `ffmpeg -t <asked>`. Handed less footage than that,
+// ffmpeg writes a shorter file and exits 0, so a five-second replacement
+// came back as four seconds and nothing said so. The local ComfyUI
+// workflows run a fixed 65 frames, which is 4.06s at 16 fps, so every
+// request longer than that was silently short.
+
+test("a backend that covers the range reports nothing", () => {
+  assert.equal(rangeShortfall(5.06, 5.06), null);
+  assert.equal(rangeShortfall(3, 3.2), null, "more than asked is not a shortfall");
+  assert.equal(rangeShortfall(5.06, 5.0), null, "under one frame is rounding");
+});
+
+test("the 65-frame local budget against a longer range is caught", () => {
+  // The exact case the harness measures: 81 frames asked, 65 delivered.
+  const short = rangeShortfall(81 / 16, 65 / 16);
+  assert.ok(short, "4.06s against 5.06s must be reported");
+  assert.equal(Math.round(short!.missing * 100) / 100, 1);
+  assert.equal(Math.round(short!.got * 100) / 100, 4.06);
+});
+
+test("it judges the gap, not the backend", () => {
+  // Nothing here knows a frame budget, so a new backend, an edited
+  // workflow or a provider changing its step are all covered already.
+  assert.ok(rangeShortfall(30, 4.06), "a long range against any budget");
+  assert.ok(rangeShortfall(0.5, 0.1), "a short range too");
+  assert.equal(rangeShortfall(4.06, 4.06), null);
+});
+
+test("a probe that failed never invents a shortfall", () => {
+  // probeDuration resolves NaN rather than rejecting: losing the warning
+  // is acceptable, failing a finished edit is not.
+  assert.equal(rangeShortfall(5, Number.NaN), null);
+  assert.equal(rangeShortfall(Number.NaN, 5), null);
+  assert.equal(rangeShortfall(0, 0), null);
+  assert.equal(rangeShortfall(-1, 5), null);
+});
+
+test("a backend that returned nothing at all is a full shortfall", () => {
+  const none = rangeShortfall(5.06, 0);
+  assert.ok(none);
+  assert.equal(none!.got, 0);
+  assert.equal(none!.missing, 5.06);
 });

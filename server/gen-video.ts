@@ -72,6 +72,8 @@ export interface GenJob {
   estimate: string;
   refImageUrl?: string;
   backend?: string;
+  /** Set when the backend covered less of the range than was asked for. */
+  shortfall?: { asked: number; got: number; missing: number };
   subjectLabel?: string;
   refLabel?: string;
 }
@@ -118,6 +120,38 @@ export function validateEditInputs(
  * budget says how many pixels we are willing to spend; the clip says what
  * shape they go in. `multiple` is 16 for diffusion backends (latent stride)
  * and 2 for anything that only needs yuv420p. */
+/**
+ * How much of the range a backend actually covered.
+ *
+ * Every backend has a frame budget, and it is never the user's range: the
+ * local ComfyUI workflows run a fixed 65 frames, VACE pads short ranges up
+ * to 81, providers round to their own step. That is fine. What is not fine
+ * is that `finishEdit` cuts the result back with `ffmpeg -t <asked>`, and
+ * ffmpeg given less footage than that simply writes a shorter file and
+ * exits 0 -- so a five-second replacement came back as four seconds of
+ * replacement and a second of nothing, with no error anywhere.
+ *
+ * So the check lives at the one place every backend passes through, and it
+ * compares what came back against what was asked rather than knowing any
+ * backend's budget. A new backend, a provider that quietly changes its
+ * step, a workflow someone edits: all covered, none of them named here.
+ *
+ * The tolerance is one frame at 16 fps. Below that it is rounding.
+ */
+export function rangeShortfall(
+  askedSeconds: number,
+  gotSeconds: number,
+  toleranceSeconds = 1 / 16,
+): { asked: number; got: number; missing: number } | null {
+  if (!Number.isFinite(askedSeconds) || !Number.isFinite(gotSeconds))
+    return null;
+  if (askedSeconds <= 0) return null;
+  const got = Math.max(0, gotSeconds);
+  const missing = askedSeconds - got;
+  if (missing <= toleranceSeconds) return null;
+  return { asked: askedSeconds, got, missing };
+}
+
 export function fitToBudget(
   source: { width: number; height: number },
   budgetWidth: number,
@@ -643,6 +677,22 @@ function probeSize(path: string): Promise<{ width: number; height: number }> {
   });
 }
 
+function probeDuration(path: string): Promise<number> {
+  return new Promise((resolvePromise) => {
+    execFile(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+      { timeout: 30_000, windowsHide: true },
+      (error, stdout) => {
+        // A probe that fails must not fail the job: the result is already
+        // written and useful. We lose the warning, not the edit.
+        if (error) return resolvePromise(Number.NaN);
+        resolvePromise(Number(stdout.trim()));
+      },
+    );
+  });
+}
+
 function subjectHeightFraction(mask: MaskVideoSource | null): number {
   if (!mask || !mask.frames.length) return 0.7;
   const frame = [...mask.frames].sort((a, b) => a.frame - b.frame)[0];
@@ -824,7 +874,7 @@ export class GenJobManager {
     record("generation.total", {
       jobId: job.id,
       backend: job.backend,
-      status: "ok",
+      status: job.shortfall ? "partial" : "ok",
       elapsed_ms: job.finishedAt - job.createdAt,
     });
     this.onSettled?.(job);
@@ -944,6 +994,14 @@ export class GenJobManager {
       genFilePath(rangedName),
     ]);
     job.files.result = rangedName;
+    // The cut above is "-t <asked>". Given less footage than that, ffmpeg
+    // writes what it has and exits 0, which is how a short result used to
+    // pass for a complete one. Measure instead of assume.
+    const covered = rangeShortfall(
+      cut.duration,
+      await probeDuration(genFilePath(rangedName)),
+    );
+    if (covered) job.shortfall = covered;
     // recast tracks people itself and returns a finished frame; everything
     // else gets the surroundings restored outside the mask.
     if (cut.maskName && job.backend !== "recast") {
