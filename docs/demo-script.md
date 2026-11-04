@@ -1,131 +1,123 @@
 # The three-minute demo
 
-What to say, in order, and why each line is there. Everything you speak to
-the editor is in **English** — the product is English and the voice agent is
-pinned to it, so a French instruction will get a worse transcription.
+What to show, in order, and why each beat earns its place.
 
-Clip: `Balade sur la cote.mp4`, already imported, 11 shots, 1:13. Portrait,
-which is worth showing: it proves the editor does not reshape your footage.
+Everything you type or say to the editor is in **English**: the product is
+English and the voice agent is pinned to it, so a French instruction
+transcribes worse.
 
-Record with OpenScreen. Keep the mouse still while Muse talks — the point is
-that you are not clicking.
+**The clip.** `walk.mp4` — a woman in a red dress walking a grey London
+street, Pexels, free to use. Shot 12 in the project. It was chosen for one
+reason: the SAM cutout has to be legible on screen in a single glance, and a
+strong colour against a neutral background is what makes the outline read.
 
----
-
-## 0:00 – 0:15 · Open on the thing, not on a title card
-
-Have the editor already open with the clip loaded and Muse at her desk.
-Say to camera, or in voice-over:
-
-> "This is ShoulderCut. It is a video editor you talk to. I am not going to
-> touch a menu for the next three minutes."
-
-**Why:** the single claim the whole demo has to land. Say it once, up front,
-then prove it.
+**The narration** is already recorded in your own cloned voice at
+`.runtime/demo/narration.mp3` (72 s, ElevenLabs `eleven_v4`). Lay it under
+the screen capture rather than speaking live — it is cleaner, and it frees
+you to concentrate on driving the editor.
 
 ---
 
-## 0:15 – 0:45 · The subject, not the frame
+## The idea the video has to land
 
-Click **Talk** once. Then say:
+A director does not touch the keyboard. They stand behind the editor and
+say *cut there*, *no, go back*, *make it blue*. The editor does the work.
 
-> "Cut out the woman and show me the preview."
-
-Wait for the mask. Let the cutout sit on screen for a beat — the glowing
-outline is the evidence.
-
-> "Nice. Now take me to the moment she turns towards the camera."
-
-**Why:** two Meta models in thirty seconds. SAM 3.1 turns a plain noun
-phrase into a tracked mask, and `find_moment` searches the footage for a
-described event rather than a timestamp. The second instruction also shows
-she holds context — "she" refers back.
+**You are the director. Muse is the editor.** Everything below exists to
+show that one relationship.
 
 ---
 
-## 0:45 – 1:45 · The edit that costs money, and the one that does not
+## 0:00 – 0:20 · Open on the thing
 
-> "Replace her white dress with a red leather jacket."
+The editor already open, `walk.mp4` loaded, nothing else on screen. No title
+card.
 
-She will tell you the job is running and give you a job id. **Do not wait in
-silence.** While it generates, talk over her shoulder — that is the whole
-name of the product:
+The narration opens by itself. Let it. Do not touch anything for the first
+twenty seconds — stillness here is the argument: nobody is clicking.
 
-> "While that runs — add a slow push-in on her, and cool down the
-> background."
+## 0:20 – 0:50 · The subject, not the frame
 
-**Why:** this is the part no other editor does. The generation is
-asynchronous, she keeps working, and the mascot keeps working with her —
-she does not stop and stare at you. The second instruction lands a shader
-that Muse Wonder *writes*: there is no effects catalogue, so say so:
+Type, or say:
 
-> "There is no effects library here. She just wrote that shader."
+> **Cut out the woman in the red dress and show me the preview.**
 
----
+Let the cutout sit for a beat once it lands. The glowing outline is the
+evidence, and it is the single most legible thing in the whole video.
 
-## 1:45 – 2:20 · Show the receipt
+**Why:** SAM 3.1 turning a plain noun phrase into a tracked mask, in one
+instruction. No rotoscoping, no keyframes, no selection tool.
 
-When the generation lands, let it drop into the timeline, then:
+## 0:50 – 1:50 · The part no other editor does
 
-> "Undo that. Actually, put it back."
+Type, or say:
 
-**Why:** thirty seconds that quietly answer "is this real or a video of a
-prompt". Generated results join the edit graph as ordinary clips, so they
-trim, move and undo like anything else. Nothing else in the demo proves the
-work is in a real timeline.
+> **Now give the street behind her a cold blue night grade, and keep her warm.**
 
----
+While it works, **do not wait in silence**. Send the next instruction on top
+of it:
 
-## 2:20 – 2:50 · The thing a judge is paid to be suspicious about
+> **Add a slow push-in on her.**
 
-Say, to camera:
+**Why:** this is the whole product. The work is running, and you keep
+directing over its shoulder. No form, no progress bar you stare at. And the
+grade is a shader that Muse writes on the spot — there is no effects
+catalogue in this app, which is worth saying out loud.
 
-> "Every mask here is SAM 3.1. The editor itself is Muse Wonder — it reads
-> the instruction, picks the tools and writes the WGSL. The conversation is
-> Muse Spark, which is why she can answer while a render is still going.
-> Captions are Meta ASR. One API key, four services."
+## 1:50 – 2:20 · Show it is a real timeline
 
-Then:
+> **Undo that. Actually, put it back.**
 
-> "Generation runs on my own GPU through ComfyUI, for nothing. No GPU? The
-> same request routes to a hosted provider. The editor cannot tell the
-> difference."
+**Why:** thirty seconds that answer the question a judge is paid to ask —
+is this a real editor or a video of a prompt? Generated results and shader
+effects join the edit graph as ordinary clips, so they trim, move, undo and
+export like anything else.
 
-**Why:** the Meta Model API use is a pass/fail gate before anything is
-scored, and "we used Meta models" is weaker than naming which model does
-which job. The second part answers the obvious objection, that this only
-works on your machine.
+## 2:20 – 2:50 · Name the models
 
----
+The narration already does this, so just let the editor sit on screen:
+
+> Every mask is SAM 3.1. The editor itself is Muse Wonder — it reads the
+> instruction, picks the tools and writes the code. The conversation is Muse
+> Spark, which is why an answer comes back while a render is still running.
+> Captions are Meta ASR. One API key, four services.
+
+**Why:** "we used Meta models" is weaker than naming which model does which
+job, and genuine Meta Model API use is a pass/fail gate before any scoring.
 
 ## 2:50 – 3:00 · Land it
 
-> "Export."
+> **Export.**
 
-Let the file land. Close on the editor, not on your face.
-
-> "Your idea, your voice, your cut."
+Close on the editor, not on your face.
 
 ---
 
-## If something fails on camera
-
-Do not re-record. Say what happened and carry on — a demo where the presenter
-says "that one failed, here is why" reads as honest, and the Indie track is
-judged on *whether it works*, not on whether it is flawless. The two known
-rough edges:
-
-- A local backend covers about four seconds per pass. Ask for a longer range
-  and she will now tell you she covered less than you asked. That is a
-  feature of this build, not a crash — say so.
-- A short range is padded to the model's 81-frame minimum, so a three-second
-  edit bills five seconds on a hosted provider.
-
 ## Before you hit record
 
-- `npm run demo`, and wait for the ready line.
-- ComfyUI on `127.0.0.1:8188` if you want the free path, or accept the bill.
-- Check the mic in **Audio and export options** — the same device serves the
-  realtime session and the recorded fallback.
-- One rehearsal of the 0:45 instruction, because it is the one that costs
-  money if you have to repeat it.
+```bash
+npm run demo
+```
+
+Wait for the ready line. Then:
+
+- **ComfyUI on `127.0.0.1:8188`** if you want generation to be free. Without
+  it, every generative request bills fal.ai instead, silently.
+- **Select shot 12 (`walk.mp4`)** before recording, so you open on the right
+  footage.
+- **Rehearse the 0:50 instruction once.** It is the one that costs money if
+  you have to repeat it on a hosted backend.
+
+## If something fails on camera
+
+Do not re-record. Say what happened and carry on. The Indie track is judged
+on *whether it works*, not on whether nothing ever goes wrong, and a
+presenter who says "that one failed, here is why" reads as honest.
+
+Two rough edges worth knowing:
+
+- A local ComfyUI backend covers about four seconds per pass. Ask for a
+  longer range and Muse now tells you it covered less than you asked rather
+  than quietly returning a short result.
+- A short range is padded up to the model's 81-frame minimum, so a
+  three-second edit bills five seconds on a hosted provider.
