@@ -1,6 +1,11 @@
 # Generative video architecture — voice-controlled studio
 
-Status: design document, October 2026. Not yet implemented.
+Status: implemented, November 2026. Seven backends ship in
+`server/gen-video.ts` -- vace, kling-o3, recast and wan-animate hosted,
+vace-local, scail and scail-animate on a local ComfyUI -- and
+`tools/dogfood.ts` measures every one of them on real clips. This
+document is the design they were built from; where the two disagree,
+the code is right.
 Product frame: `docs/SPEC.md`. Shader contract: `docs/fx-interface.md`.
 Distilled editing craft: `docs/editing-craft.md`.
 
@@ -372,10 +377,10 @@ is green.
 
 Open questions: Q1 — fal account and Runway account provisioning
 and spend limits (owner action). Q2 — multi-subject mask union
-semantics in the SAM adapter. Q3 — **closed Oct 31**: the Muse Code
-harness keeps the supervisor role; Muse Spark is not wired (SPEC
-§13). The MCP interface is identical either way, so this is
-reversible after the event.
+semantics in the SAM adapter. Q3 — **closed Nov 4**: the Muse Code harness
+keeps the supervisor role and Muse Spark hosts the conversation
+alongside it, in `server/conversation.ts` and `voice/dialogue.py`. The
+MCP interface is identical either way.
 
 ## 11. Technique registry: the supervisor's added value
 

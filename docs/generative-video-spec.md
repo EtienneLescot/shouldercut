@@ -23,8 +23,9 @@ One spoken-style command — « Transforme les enfants en robots » on
 
 ## 2. Non-goals (POC)
 
-- No multi-clip edit graph yet: a generated result is a file plus a
-  job record, not yet a timeline clip (SPEC §6 remains the target).
+- A generated result joins the edit graph as an ordinary clip once the
+  job completes (`server/bridge.ts`, on the job endpoint), so it trims,
+  moves, undoes and exports like anything else on the timeline.
 - No final-tier render, no critique pass, no cost billing beyond an
   estimate string and a per-job log line.
 - No ComfyUI execution in the product path (R&D only, per design).

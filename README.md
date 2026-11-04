@@ -52,6 +52,8 @@ One `MODEL_API_KEY`, four services, each doing a distinct job:
 | [docs/remote-access.md](docs/remote-access.md) | Letting someone else drive your editor |
 | [docs/dogfooding.md](docs/dogfooding.md) | The harness that measures every backend |
 | [docs/demo-script.md](docs/demo-script.md) | The three-minute demo, line by line |
+| [docs/costs.md](docs/costs.md) | What spends money, per feature |
+| [docs/character-replacement-research.md](docs/character-replacement-research.md) | Why replacement does not use mask inpainting |
 | [AGENTS.md](AGENTS.md) | How changes get made here: fix the class, never the case |
 
 Status: submitted 4 November 2026, feature-complete on the P0 scope, every

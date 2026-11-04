@@ -69,5 +69,8 @@ Rules in force:
 
 - Runway (`aleph2`) and Google (Veo 3.1, Gemini Omni Flash edit) are in
   the registry as `planned`. No account, no key, no spend.
-- Muse Spark: not wired (SPEC §13). No tokens spent.
-- LiveKit: no room, no cloud account (SPEC §13).
+- Muse Spark: wired and spending. It hosts the conversation in
+  `server/conversation.ts` and `voice/dialogue.py`, which is why the
+  mascot can answer while an edit is still running. Billed per token
+  on the same MODEL_API_KEY.
+- LiveKit: the local `--dev` server, so no cloud account and no spend.
