@@ -14,6 +14,10 @@
 #   4. A ComfyUI somewhere else entirely -- a serverless deployment, another
 #      machine on your network. Point COMFY_URL at it.
 
+# Verified 4 Nov 2026: both images build, `docker compose up editor`
+# serves the app on 5173 with the access gate intact, and a real browser
+# loads it with stylesheets, WebCodecs and WebGPU all live.
+
 name: shouldercut
 
 services:
