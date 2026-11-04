@@ -908,3 +908,84 @@ body[data-working="true"] .agent-status:before {
     animation: none !important;
   }
 }
+
+/* === The interface gets out of the way ==============================
+   "On parle au-dessus de l'épaule de son monteur": the video is the
+   screen, and everything else is a whisper on top of it that leaves when
+   nobody is pointing at it. Nothing is removed -- every control is still
+   one mouse move away -- it just stops competing with the picture.
+   body[data-chrome="quiet"] is set after a few seconds without input. */
+
+.workspace {
+  gap: 0;
+}
+/* The picture takes the room. The stage used to sit in a bordered card
+   with its own heading, which framed the video as a document rather than
+   as the thing you are working on. */
+.stage {
+  border: 0;
+  border-radius: 0;
+  background: #07080b;
+}
+.stage canvas#preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Chrome that fades: the top bar, the transport, the clip strip. */
+.topbar,
+.playback,
+.clip-list,
+.video-heading {
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+body[data-chrome="quiet"] .topbar {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+body[data-chrome="quiet"] .playback,
+body[data-chrome="quiet"] .clip-list,
+body[data-chrome="quiet"] .video-heading {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+/* The conversation never leaves: it is the point of the product. It only
+   gets quieter, so the picture stays the brightest thing on screen. */
+body[data-chrome="quiet"] .conversation-foot,
+body[data-chrome="quiet"] .reply-header {
+  opacity: 0.35;
+}
+/* While Muse works, the chrome stays out of the way whatever the mouse
+   is doing: the trail and the picture are what matter then. */
+body[data-working="true"] .video-heading {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar, .playback, .clip-list, .video-heading { transition: none; }
+}
+
+/* The picture gets the room the chrome was holding. The workspace capped
+   itself at 1240px inside a 40px gutter, and the conversation reserved
+   208px whether or not anything was being said, so a 16:9 clip sat in a
+   letterbox on every side. */
+#app {
+  max-width: none;
+  padding: 0 16px;
+  grid-template-rows: 64px minmax(200px, 1fr) 176px;
+}
+.workspace {
+  max-width: none;
+}
+/* Small enough to be a companion rather than a character sheet. */
+.muse {
+  width: 116px;
+  height: 134px;
+}
+@media (max-width: 900px) {
+  #app { padding: 0 10px; grid-template-rows: 56px minmax(180px, 1fr) 168px; }
+  .muse { width: 84px; height: 98px; }
+}

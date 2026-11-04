@@ -86,6 +86,26 @@ const muse = createMascot(museCanvas);
 const trail = createWorkTrail(
   document.querySelector<HTMLElement>("#workTrail")!,
 );
+
+// The interface gets out of the way when nobody is pointing at it, and
+// comes back on the first sign of a hand. Typing counts as attention, so
+// the chrome never vanishes mid-instruction.
+const QUIET_AFTER_MS = 3200;
+let quietTimer: ReturnType<typeof setTimeout> | null = null;
+function stirChrome(): void {
+  document.body.dataset.chrome = "awake";
+  if (quietTimer) clearTimeout(quietTimer);
+  quietTimer = setTimeout(() => {
+    const typing =
+      document.activeElement instanceof HTMLInputElement ||
+      document.activeElement instanceof HTMLTextAreaElement;
+    if (!typing) document.body.dataset.chrome = "quiet";
+  }, QUIET_AFTER_MS);
+}
+for (const event of ["pointermove", "pointerdown", "keydown", "wheel"]) {
+  window.addEventListener(event, stirChrome, { passive: true });
+}
+stirChrome();
 let voiceWorking = false,
   supervisorWorking = false,
   generationWorking = false,

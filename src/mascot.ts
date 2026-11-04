@@ -1,31 +1,16 @@
-// The original textured Jolly mesh, with a small two-arm skin rig.
-// The head, torso, legs and authored rear silhouette remain untouched.
-import {
-  ACESFilmicToneMapping,
-  AmbientLight,
-  Bone,
-  Box3,
-  BufferGeometry,
-  CanvasTexture,
-  DirectionalLight,
-  Float32BufferAttribute,
-  Group,
-  MathUtils,
-  Matrix4,
-  Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-  PerspectiveCamera,
-  PlaneGeometry,
-  Scene,
-  Skeleton,
-  SkinnedMesh,
-  Uint16BufferAttribute,
-  Vector3,
-  WebGLRenderer,
-  type Material,
-} from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+// Muse, drawn rather than modelled.
+//
+// She used to be a generated 3D mesh of Meta's Jolly. Photoreal plush fur
+// next to a video editor reads as a product shot dropped into the UI: the
+// eye treats it as a thing, not as a presence. Flat shapes and motion carry
+// the same character at a tenth of the weight, and they can say what she is
+// doing -- turning to you, waving, head down and typing -- which a static
+// mesh could only hint at by leaning. Dropping it also drops three.js and
+// a 4 MB asset from the page.
+//
+// Everything is drawn from paths at runtime: no sprite sheet, no model, no
+// file to ship.
+
 export type MascotState =
   | "idle"
   | "listening"
@@ -33,217 +18,293 @@ export type MascotState =
   | "thinking"
   | "done"
   | "error";
+
 export interface Mascot {
   setState(state: MascotState): void;
   setWorking(working: boolean): void;
+  /** Live microphone or speech level, 0..1. */
   setLevel(level: number): void;
   dispose(): void;
 }
+
+const SHELL = "#ece1cf";
+const SHELL_SHADE = "#d8c9b0";
+const FACE = "#fdf7ec";
+const INK = "#20242c";
+const BLUSH = "rgba(238, 150, 140, 0.55)";
+
+const ACCENT: Record<MascotState, string> = {
+  idle: "#6ee7b7",
+  listening: "#f87171",
+  speaking: "#287bff",
+  thinking: "#818cf8",
+  done: "#3ddc97",
+  error: "#f59e0b",
+};
+
+/** Design space; the canvas scales to fit whatever box the layout gives. */
+const W = 120;
+const H = 132;
+
+function ease(from: number, to: number, rate: number): number {
+  return from + (to - from) * rate;
+}
+
 export function createMascot(canvas: HTMLCanvasElement): Mascot {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setClearColor(0, 0);
-  renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  const scene = new Scene(),
-    camera = new PerspectiveCamera(32, 1, 0.1, 30);
-  camera.position.set(0, 2.3, 8);
-  camera.lookAt(0, 1.65, 0);
-  scene.add(new AmbientLight(0xffffff, 1.5));
-  for (const [color, power, x, y, z] of [
-    [0xfff7e8, 2.6, -3, 5, 5],
-    [0xd3e5ff, 1.2, 3, 2, 2],
-    [0xffffff, 2, 1, 3, -4],
-  ]) {
-    const light = new DirectionalLight(color, power);
-    light.position.set(x, y, z);
-    scene.add(light);
-  }
-  const character = new Group();
-  scene.add(character);
-  const arms: Bone[] = [];
-  let loaded = false,
-    disposed = false;
-  new GLTFLoader().load(
-    "/mascot/jolly.glb",
-    (gltf) => {
-      if (disposed) return;
-      gltf.scene.updateMatrixWorld(true);
-      const box = new Box3().setFromObject(gltf.scene),
-        center = box.getCenter(new Vector3()),
-        size = box.getSize(new Vector3());
-      const scale = 3.4 / Math.max(size.x, size.y, size.z);
-      const normalization = new Matrix4()
-        .makeRotationY(0.76)
-        .multiply(new Matrix4().makeScale(scale, scale, scale))
-        .multiply(
-          new Matrix4().makeTranslation(-center.x, -box.min.y, -center.z),
-        );
-      gltf.scene.traverse((node) => {
-        if (!(node instanceof Mesh)) return;
-        const geometry = node.geometry
-          .clone()
-          .applyMatrix4(
-            new Matrix4().multiplyMatrices(normalization, node.matrixWorld),
-          );
-        const material = (
-          Array.isArray(node.material) ? node.material[0] : node.material
-        ).clone() as MeshStandardMaterial;
-        material.roughness = 0.96;
-        material.metalness = 0;
-        const root = new Bone(),
-          left = new Bone(),
-          right = new Bone();
-        left.position.set(-0.63, 1.83, 0);
-        right.position.set(0.63, 1.83, 0);
-        root.add(left, right);
-        const position = geometry.getAttribute("position"),
-          indices: number[] = [],
-          weights: number[] = [];
-        for (let i = 0; i < position.count; i++) {
-          const x = position.getX(i),
-            y = position.getY(i);
-          // Only the outer arms get weights. Smooth shoulder falloff avoids a cut seam.
-          const w =
-            MathUtils.smoothstep(Math.abs(x), 0.56, 0.86) *
-            (1 - MathUtils.smoothstep(y, 1.8, 2.02)) *
-            MathUtils.smoothstep(y, 0.5, 0.8);
-          indices.push(0, x < 0 ? 1 : 2, 0, 0);
-          weights.push(1 - w, w, 0, 0);
-        }
-        geometry.setAttribute(
-          "skinIndex",
-          new Uint16BufferAttribute(indices, 4),
-        );
-        geometry.setAttribute(
-          "skinWeight",
-          new Float32BufferAttribute(weights, 4),
-        );
-        const mesh = new SkinnedMesh(geometry, material);
-        mesh.add(root);
-        mesh.bind(new Skeleton([root, left, right]));
-        character.add(mesh);
-        arms.push(left, right);
-      });
-      loaded = true;
-      canvas.dataset.loaded = "true";
-    },
-    undefined,
-    () => console.warn("Muse mascot could not be loaded."),
-  );
-  const shadowCanvas = document.createElement("canvas");
-  shadowCanvas.width = shadowCanvas.height = 128;
-  const ctx = shadowCanvas.getContext("2d")!,
-    gradient = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
-  gradient.addColorStop(0, "rgba(0,0,0,.25)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 128, 128);
-  const shadowTexture = new CanvasTexture(shadowCanvas),
-    shadow = new Mesh(
-      new PlaneGeometry(2.7, 2),
-      new MeshBasicMaterial({
-        map: shadowTexture,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-  shadow.rotation.x = -Math.PI / 2;
-  shadow.position.y = -0.025;
-  scene.add(shadow);
-  let state: MascotState = "idle",
-    working = false,
-    level = 0,
-    previous = performance.now() / 1000,
-    raf = 0;
-  const start = previous,
-    reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  const damp = (a: number, b: number, dt: number, speed = 4): number =>
-    MathUtils.lerp(a, b, 1 - Math.exp(-speed * dt));
-  function frame(ms: number): void {
-    raf = requestAnimationFrame(frame);
-    const now = ms / 1000,
-      dt = Math.min(now - previous, 0.05),
-      t = now - start;
-    previous = now;
-    const rect = canvas.getBoundingClientRect(),
-      dpr = Math.min(devicePixelRatio || 1, 2),
-      w = Math.max(1, Math.round(rect.width)),
-      h = Math.max(1, Math.round(rect.height));
-    if (
-      canvas.width !== Math.round(w * dpr) ||
-      canvas.height !== Math.round(h * dpr)
-    ) {
-      renderer.setPixelRatio(dpr);
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+  const ctx = canvas.getContext("2d")!;
+  let state: MascotState = "idle";
+  let working = false;
+  let level = 0;
+  let smoothLevel = 0;
+
+  // Pose, all eased towards their targets so nothing snaps.
+  let turn = 0; // -1 looking left, +1 right
+  let lean = 0; // forward lean, 0..1
+  let armL = 0; // 0 resting, 1 raised
+  let armR = 0;
+  let targetTurn = 0;
+  let nextGlance = 0;
+  let waveUntil = 0;
+  let blinkUntil = 0;
+  let nextBlink = 1.6;
+  let enteredAt = 0;
+  let raf = 0;
+  const start = performance.now() / 1000;
+
+  function resize(): void {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(rect.width * dpr));
+    const h = Math.max(1, Math.round(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
-    const busy = working || state === "thinking",
-      motion = reduced.matches ? 0 : 1;
-    // Face the viewer while waiting; turn completely to the video for accepted work.
-    const target = busy ? 2.0 : 0.12;
-    character.rotation.y = damp(character.rotation.y, target, dt, 3.4);
-    const settled = Math.abs(character.rotation.y - target) < 0.25;
-    character.rotation.z = damp(
-      character.rotation.z,
-      busy && settled
-        ? Math.sin(t * 2.4) * 0.012 * motion
-        : state === "listening"
-          ? -0.02
-          : 0,
-      dt,
-    );
-    character.position.y =
-      (busy ? Math.sin(t * 4) * 0.006 : Math.sin(t * 1.7) * 0.008) * motion;
-    arms.forEach((arm, i) => {
-      const side = i % 2 ? 1 : -1;
-      arm.rotation.x = damp(
-        arm.rotation.x,
-        busy
-          ? -0.27 + Math.sin(t * 6.5 + i * 2.3) * 0.07 * motion
-          : state === "speaking"
-            ? -level * 0.07 * motion
-            : 0,
-        dt,
-      );
-      arm.rotation.z = damp(
-        arm.rotation.z,
-        busy ? side * (0.08 + Math.sin(t * 4.5 + i) * 0.025 * motion) : 0,
-        dt,
-      );
-    });
-    canvas.dataset.facing = busy ? "video" : "viewer";
-    if (loaded) renderer.render(scene, camera);
   }
-  raf = requestAnimationFrame(frame);
+
+  /** A rounded hood: one dome over a wider body, drawn as a single path. */
+  function silhouette(): void {
+    ctx.beginPath();
+    ctx.moveTo(18, 120);
+    ctx.bezierCurveTo(10, 86, 14, 44, 44, 30);
+    ctx.bezierCurveTo(56, 24, 70, 24, 82, 31);
+    ctx.bezierCurveTo(110, 46, 113, 87, 105, 120);
+    ctx.bezierCurveTo(88, 127, 36, 127, 18, 120);
+    ctx.closePath();
+  }
+
+  function draw(t: number): void {
+    const since = t - enteredAt;
+    resize();
+    const dpr = canvas.width / W;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    smoothLevel = ease(smoothLevel, level, 0.25);
+
+    // --- what the pose should be ------------------------------------
+    let wantLean = 0;
+    if (state === "listening") {
+      targetTurn = Math.sin(t * 1.5) * 0.06;
+      wantLean = 0.5 + smoothLevel * 0.3;
+    } else if (state === "speaking") {
+      targetTurn = Math.sin(t * 1.1) * 0.08;
+      wantLean = 0.25;
+    } else if (state === "thinking" || working) {
+      // Head down over the work, turned a little away: busy, not watching.
+      targetTurn = -0.45 + Math.sin(t * 2.2) * 0.08;
+      wantLean = 1;
+    } else if (state === "done") {
+      targetTurn = 0;
+      wantLean = 0.1;
+    } else {
+      // Idle: look around, and wave now and then.
+      if (t > nextGlance) {
+        targetTurn = (Math.random() * 2 - 1) * 0.7;
+        nextGlance = t + 1.4 + Math.random() * 2.4;
+        if (Math.random() < 0.3) waveUntil = t + 1.6;
+      }
+      wantLean = 0;
+    }
+    turn = ease(turn, targetTurn, 0.08);
+    lean = ease(lean, wantLean, 0.09);
+
+    const busy = state === "thinking" || working;
+    const waving = t < waveUntil && !busy;
+    // While working the two hands alternate, so the tapping reads as hands
+    // rather than as one shape moving.
+    armL = ease(armL, busy ? 0.5 + Math.sin(t * 11) * 0.5 : 0, 0.3);
+    armR = ease(
+      armR,
+      busy ? 0.5 + Math.sin(t * 11 + Math.PI) * 0.5 : waving ? 1 : 0,
+      0.3,
+    );
+
+    const hop = state === "done" ? Math.max(0, Math.sin(since * 7)) * 7 : 0;
+    const bob = Math.sin(t * (busy ? 3.2 : 1.6)) * 1.8;
+
+    ctx.save();
+    ctx.translate(0, -bob - hop);
+    // Lean tips the whole figure forward from its feet.
+    ctx.translate(W / 2, H);
+    ctx.rotate(lean * 0.1 + turn * 0.04);
+    ctx.translate(-W / 2, -H);
+
+    // --- shadow ------------------------------------------------------
+    ctx.globalAlpha = 0.18 - lean * 0.04;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.ellipse(62, 126 + bob * 0.6, 30 - hop * 0.6, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Waving reaches up and out and passes behind the body; the working
+    // hands stay low and close, and must be drawn IN FRONT or the body
+    // hides them -- which is why "working" used to look like "idle".
+    const arms = (): void => {
+      ctx.strokeStyle = SHELL_SHADE;
+      ctx.lineWidth = 13;
+      ctx.lineCap = "round";
+      for (const [side, raise] of [
+        [-1, armL],
+        [1, armR],
+      ] as const) {
+        const shoulderX = 62 + side * 24;
+        // The tapping hands sit on the body's bottom edge: anywhere higher
+        // and they are the same cream on cream, invisible against it.
+        const [x, y] = busy
+          ? [62 + side * 17, 119 + raise * 7]
+          : [shoulderX + side * (3 + raise * 18), 97 - raise * 46];
+        ctx.beginPath();
+        ctx.moveTo(shoulderX, 92);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+    };
+    if (!busy) arms();
+
+    // --- body --------------------------------------------------------
+    silhouette();
+    ctx.fillStyle = SHELL;
+    ctx.fill();
+    if (busy) arms();
+
+    // --- face plate ---------------------------------------------------
+    const faceX = 62 + turn * 15;
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(faceX, 62 - lean * 5, 27 - Math.abs(turn) * 6, 29, 0, 0, Math.PI * 2);
+    ctx.fillStyle = FACE;
+    ctx.fill();
+    ctx.clip();
+
+    // eyes
+    const blinking = t < blinkUntil;
+    const squint = busy ? 0.42 : state === "done" ? 0.3 : 1;
+    const open = blinking ? 0.08 : squint;
+    ctx.fillStyle = INK;
+    for (const side of [-1, 1] as const) {
+      const ex = faceX + side * (9 - Math.abs(turn) * 2) + turn * 4;
+      const ey = 58 - lean * 5 + (busy ? 4 : 0);
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, 3.6, 4.4 * open, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // blush
+    ctx.fillStyle = BLUSH;
+    for (const side of [-1, 1] as const) {
+      ctx.beginPath();
+      ctx.ellipse(faceX + side * 18 + turn * 4, 69 - lean * 5, 5.5, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // mouth: a small arc, opening with the voice while speaking
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.9;
+    ctx.beginPath();
+    const mouthY = 71 - lean * 5;
+    if (state === "speaking" && smoothLevel > 0.05) {
+      ctx.ellipse(faceX + turn * 4, mouthY, 3.4, 1.6 + smoothLevel * 3.4, 0, 0, Math.PI * 2);
+    } else {
+      ctx.arc(faceX + turn * 4, mouthY - 2.4, 4, 0.25 * Math.PI, 0.75 * Math.PI);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // --- hood rim, drawn over the face so the opening reads ----------
+    ctx.save();
+    silhouette();
+    ctx.clip();
+    ctx.strokeStyle = SHELL;
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.ellipse(faceX, 62 - lean * 5, 33 - Math.abs(turn) * 6, 35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // A shaded inner edge is what separates hood from face at 120 px; the
+    // two creams are too close to tell apart on their own.
+    ctx.strokeStyle = SHELL_SHADE;
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.ellipse(faceX, 62 - lean * 5, 27 - Math.abs(turn) * 6, 29, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // --- what she is doing -------------------------------------------
+    ctx.fillStyle = ACCENT[state];
+    if (busy) {
+      // Three ticks rising off the work: the visual of being mid-task.
+      for (let i = 0; i < 3; i += 1) {
+        const phase = (t * 1.5 + i * 0.33) % 1;
+        ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.75;
+        ctx.beginPath();
+        ctx.arc(96 + i * 7, 44 - phase * 22, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (state === "listening") {
+      // A ring that breathes with the microphone.
+      ctx.strokeStyle = ACCENT.listening;
+      ctx.globalAlpha = 0.25 + smoothLevel * 0.55;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(62, 76, 48 + smoothLevel * 10, 54 + smoothLevel * 10, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+
+    if (t > nextBlink && !busy) {
+      blinkUntil = t + 0.12;
+      nextBlink = t + 2.2 + Math.random() * 3.5;
+    }
+  }
+
+  function frame(): void {
+    raf = requestAnimationFrame(frame);
+    draw(performance.now() / 1000 - start);
+  }
+  frame();
+
   return {
     setState(next) {
+      if (next === state) return;
       state = next;
+      enteredAt = performance.now() / 1000 - start;
+      if (next === "idle") nextGlance = 0;
+      // Greet whoever just turned up.
+      if (next === "listening") waveUntil = 0;
+      if (next === "done") waveUntil = enteredAt + 1.2;
     },
     setWorking(next) {
       working = next;
     },
     setLevel(next) {
-      level = MathUtils.clamp(next, 0, 1);
+      level = Math.min(1, Math.max(0, next));
     },
     dispose() {
-      disposed = true;
       cancelAnimationFrame(raf);
-      const geometries = new Set<BufferGeometry>(),
-        materials = new Set<Material>();
-      scene.traverse((node) => {
-        if (node instanceof Mesh) {
-          geometries.add(node.geometry);
-          for (const material of Array.isArray(node.material)
-            ? node.material
-            : [node.material])
-            materials.add(material);
-        }
-      });
-      for (const geometry of geometries) geometry.dispose();
-      for (const material of materials) material.dispose();
-      shadowTexture.dispose();
-      renderer.dispose();
     },
   };
 }

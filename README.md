@@ -89,10 +89,14 @@ section will list each shipped feature as it lands.
   Short events between samples can be missed; a failed search leaves playback unchanged.
   Replacement and other real edits remain queued with the editing specialist, and
   require a full-range track instead of reusing the preview as a complete mask.
-- [x] Jolly, the mascot: the original ComfyUI-generated `public/mascot/jolly.glb`
-  is preserved as a continuous textured mesh. It turns toward the viewer while waiting,
-  away while working, with a small arm rig and subtle movement. No desk or computer.
-  The character is Meta's; the mesh and animation are produced here.
+- [x] Jolly, the mascot: drawn rather than modelled. `src/mascot.ts` paints
+  her on a 2D canvas from paths at runtime -- no sprite sheet, no model, no
+  asset to ship. She turns toward you while waiting, waves now and then,
+  and works head-down while Muse edits. The generated mesh came first and
+  was dropped: photoreal plush fur beside a video editor reads as a product
+  shot pasted into the UI, and flat shapes carry the same character while
+  saying more about what she is doing. It also removes three.js and a 4 MB
+  asset from the page. The character is Meta's; the drawing is ours.
 - [x] Two ComfyUI tools written along the way: `comfy-frontend-to-api.py`
   converts an editor-format template into the API format `/prompt`
   accepts, resolving reroutes and bypassed nodes and pruning to the
@@ -126,14 +130,13 @@ not hackathon work, and are never presented as built during the event.
   stream parser and mask codec used server-side by the bridge. The SAM
   adapter, mask expansion, GPU upload, and `maskAt()` wiring around it
   are built during the event.
-- `three` (third-party, MIT) — WebGL renderer for the Muse mascot. The
-  model, its rig and its behaviour are built during the event.
 
 Jolly, the Muse mascot, is Meta's character, used here as an homage in a
-Meta hackathon entry. No Meta artwork or 3D file is redistributed: the
-mesh in `public/mascot/jolly.glb` is generated locally from a reference
-photo by `tools/make-mascot.py`, and that script reproduces it from
-scratch. ShoulderCut is not affiliated with or endorsed by Meta.
+Meta hackathon entry. No Meta artwork is redistributed: she is drawn from
+paths at runtime in `src/mascot.ts`. The image-to-3D tooling that produced
+the earlier mesh is still in `tools/` and still works; the shipped mascot
+simply no longer uses it. ShoulderCut is not affiliated with or endorsed
+by Meta.
 - Vite and TypeScript (third-party) — build tooling.
 
 External tools invoked, not bundled: `ffmpeg` (segment extraction, edge
@@ -208,11 +211,10 @@ Partial transcripts, errors, voice provider changes, and measured dialogue
 and editing durations are sent to the page. The pinned Stimm revision
 also fixes completion of streamed speech for both LiveKit readers.
 
-Muse shares the central conversation area below the footage, using the original
-`public/mascot/jolly.glb` and its textures as a continuous mesh. It turns toward
-the viewer while waiting and away while working, with subtle arm movement.
-There is no desk or laptop. Preview all poses at `/tools/mascot-preview.html`
-in the dev server. Reduced-motion preferences retain the poses with less motion.
+Muse shares the central conversation area below the footage, drawn on a 2D
+canvas by `src/mascot.ts`. She turns toward the viewer while waiting, waves
+now and then, and works head-down while Muse edits. There is no desk or
+laptop. Reduced-motion preferences retain the poses with less motion.
 
 The editing process explicitly uses `MUSE_EDITOR_MODEL=muse-wonder-1.0`,
 an empty Muse preset and only the ShoulderCut MCP tools. It reports actual
