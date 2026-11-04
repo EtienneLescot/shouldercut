@@ -14,3 +14,6 @@ server/clip-store/
 .DS_Store
 __pycache__/
 .runtime/
+
+# Local TLS material for remote access. Never committed.
+.certs/

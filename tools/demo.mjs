@@ -30,6 +30,7 @@ function stop(code = 0) {
 }
 process.on('SIGINT', () => stop());
 process.on('SIGTERM', () => stop());
+const BRIDGE = (process.env.SHOULDERCUT_BRIDGE || 'http://127.0.0.1:5173').replace(/\/$/, '');
 async function responds(url) {
   return fetch(url, { signal: AbortSignal.timeout(1200) }).then((r) => r.ok).catch(() => false);
 }
@@ -52,15 +53,15 @@ try {
       await waitFor(health);
     }
   }
-  if (!await responds('http://127.0.0.1:5173/api/health')) {
+  if (!await responds(BRIDGE + '/api/health')) {
     start(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--port', '5173', '--strictPort']);
-    await waitFor('http://127.0.0.1:5173/api/health');
+    await waitFor(BRIDGE + '/api/health');
   }
   if (!await responds('http://127.0.0.1:8081/')) {
     start('uv', ['run', 'python', 'agent.py', 'start'], resolve('voice'));
     await waitFor('http://127.0.0.1:8081/', 90);
   }
-  console.log('ShoulderCut ready: http://127.0.0.1:5173 — click Talk, then speak freely.');
+  console.log('ShoulderCut ready: ' + BRIDGE + ' — click Talk, then speak freely.');
 } catch (error) {
   console.error(error.message);
   stop(1);

@@ -203,12 +203,16 @@ const MAX_CLIP_BYTES = 128 * 1024 * 1024;
  * skipped — a pass is meant to be cheap enough to run on every change. */
 /** The key the editor asks for when it is reachable from outside this
  * machine. Unset locally, where there is nothing to gate. */
+/** Where the editor is. https once TLS is on, which is what a remote
+ * tester needs; the same knob the MCP server and the voice agent read. */
+const BRIDGE = (process.env.SHOULDERCUT_BRIDGE || "http://127.0.0.1:5173").replace(/\/$/, "");
+
 function accessKey(): Record<string, string> {
   const key = (process.env.SHOULDERCUT_ACCESS_KEY || "").trim();
   return key ? { "X-ShoulderCut-Key": key } : {};
 }
 async function sampleClips(limit: number): Promise<string[]> {
-  const fromProject = await fetch("http://127.0.0.1:5173/api/project", {
+  const fromProject = await fetch(BRIDGE + "/api/project", {
     signal: AbortSignal.timeout(3000),
     headers: accessKey(),
   })

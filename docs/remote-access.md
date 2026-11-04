@@ -83,6 +83,39 @@ Both were found by trying it, not by reading it:
   credential a rebound request arrives without one, because cookies do not
   cross origins. With no key set, Vite's default stays.
 
+## HTTPS is not optional for a remote tester
+
+Found by loading the editor from the tailnet address rather than by reading
+the code: over plain `http://` on any origin that is not localhost, the page
+is not a secure context, and three things the editor is built on are gated on
+one -- WebCodecs (`VideoDecoder is not defined`, which is what showed up),
+WebGPU, and `getUserMedia`. That is decoding, rendering and the microphone:
+the whole editor. localhost is exempt by spec, which is exactly why none of
+it appears until the first remote load.
+
+`vite.config.ts` picks up a certificate from `.certs/cert.pem` and
+`.certs/key.pem` (override with `SHOULDERCUT_TLS_CERT` / `SHOULDERCUT_TLS_KEY`)
+and serves HTTPS when both exist, HTTP when they do not. Two ways to get one:
+
+- **A real certificate.** `tailscale cert <machine>.<tailnet>.ts.net` mints a
+  Let’s Encrypt one, no browser warning anywhere. It needs **HTTPS
+  Certificates** enabled for the tailnet first, at
+  <https://login.tailscale.com/admin/dns> -- without it the CLI answers
+  "your Tailscale account does not support getting TLS certs".
+- **A tunnel that terminates TLS for you** (ngrok, cloudflared). Then leave
+  `.certs/` absent so Vite stays on HTTP and the tunnel presents the real
+  certificate. This publishes to the whole internet, so the access key is
+  doing real work.
+
+A self-signed certificate is a dead end for anyone but you: it gives a secure
+context, but some browsers refuse it outright with no click-through, so a
+tester can be stopped at the door.
+
+With TLS on, the local callers have to follow. `.env` sets
+`SHOULDERCUT_BRIDGE=https://127.0.0.1:5173` and points `NODE_EXTRA_CA_CERTS`
+and `SSL_CERT_FILE` at the certificate, which Node and Python both honour and
+which trusts that one certificate and nothing else.
+
 ## Known gaps
 
 - **Vite's HMR websocket is not gated.** It upgrades on the HTTP server rather
