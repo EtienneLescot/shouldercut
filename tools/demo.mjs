@@ -53,7 +53,7 @@ try {
     }
   }
   if (!await responds('http://127.0.0.1:5173/api/health')) {
-    start(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '5173', '--strictPort']);
+    start(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--port', '5173', '--strictPort']);
     await waitFor('http://127.0.0.1:5173/api/health');
   }
   if (!await responds('http://127.0.0.1:8081/')) {

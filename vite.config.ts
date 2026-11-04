@@ -21,6 +21,23 @@ export default defineConfig(({ mode }) => {
       // localhost. Nothing here names a tunnel, a tailnet or a port, so it
       // holds for whatever we put in front of it next.
       allowedHosts: gated ? true : undefined,
+      // And which interface we answer on. Loopback is right while the editor
+      // is only for this machine; once a key is set it is meant to be
+      // reached, and a server bound to 127.0.0.1 cannot be -- not by a
+      // tunnel, not by anything.
+      //
+      // Answering everywhere rather than on one pinned address is deliberate.
+      // Vite takes a single host, so pinning the tunnel address drops
+      // loopback, and loopback is how every local caller reaches us: the MCP
+      // server, the voice agent, the dogfood harness, npm run demo. They all
+      // broke the first time this was tried. What keeps the editor safe is
+      // the key on every route, not which interface it listens on --
+      // SHOULDERCUT_HOST stays available for anyone who wants to narrow it
+      // and can live without the local tools.
+      //
+      // This is the only place that decides: the npm scripts no longer pass
+      // --host, so they inherit it.
+      host: gated ? env.SHOULDERCUT_HOST || true : '127.0.0.1',
     },
   };
 });

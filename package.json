@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "demo": "node tools/demo.mjs",
-    "dev": "vite --host 127.0.0.1 --port 5173",
+    "dev": "vite --port 5173",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 5173",
+    "preview": "vite preview --port 5173",
     "test": "node --experimental-strip-types --test tools/test-*.ts",
     "diagnostics": "node tools/analyze-ux.mjs",
     "test:voice": "uv run --directory voice python -m unittest discover -p \"test_*.py\""
