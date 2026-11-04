@@ -1,15 +1,21 @@
-// Muse, drawn rather than modelled.
+// Jolly at her editing desk, played from sprite sheets.
 //
-// She used to be a generated 3D mesh of Meta's Jolly. Photoreal plush fur
-// next to a video editor reads as a product shot dropped into the UI: the
-// eye treats it as a thing, not as a presence. Flat shapes and motion carry
-// the same character at a tenth of the weight, and they can say what she is
-// doing -- turning to you, waving, head down and typing -- which a static
-// mesh could only hint at by leaning. Dropping it also drops three.js and
-// a 4 MB asset from the page.
+// She used to be drawn from paths at runtime, and before that she was a
+// generated 3D mesh. Both could only suggest what she was doing by leaning.
+// These are 51 drawn poses in three atlases, nine sequences at 12 fps, so
+// she can actually turn round, wave, nod, and go back to typing.
 //
-// Everything is drawn from paths at runtime: no sprite sheet, no model, no
-// file to ship.
+// The asset ships its own small state machine: every sequence declares the
+// pose it starts in and the pose it ends in, and the only two poses are
+// `poste` (at the desk, back to us) and `ecoute` (turned round, facing us).
+// A sequence may only follow one whose end pose matches its start pose, so
+// switching is never a cut -- `se_retourner` and `reprendre` are the two
+// transitions that carry her between the poses.
+//
+// That maps onto the app's axes without flattening them. Which way she
+// faces answers to the conversation; what her hands do answers to the work.
+// Talking to her while she works turns her round without stopping the work:
+// when you are done she goes back to the desk and picks the typing up again.
 
 export type MascotState =
   | "idle"
@@ -27,26 +33,40 @@ export interface Mascot {
   dispose(): void;
 }
 
-const SHELL = "#ece1cf";
-const SHELL_SHADE = "#d8c9b0";
-const FACE = "#fdf7ec";
-const INK = "#20242c";
-const BLUSH = "rgba(238, 150, 140, 0.55)";
+const ASSETS = "/assets/jolly/";
 
-// Only two signs get drawn, and either can be on without the other: amber
-// for work under way, coral for an open microphone. Same two meanings as
-// the stylesheet. A colour per state was the wrong shape -- it assumed she
-// could only be in one of them at a time.
-const WORK = "#d9a441";
-const LIVE = "#e8705a";
-
-/** Design space; the canvas scales to fit whatever box the layout gives. */
-const W = 120;
-const H = 132;
-
-function ease(from: number, to: number, rate: number): number {
-  return from + (to - from) * rate;
+interface Sheet {
+  image: string;
 }
+interface Cell {
+  atlas: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+interface Sequence {
+  fps: number;
+  loop: boolean;
+  next?: string | null;
+  startPose: string;
+  endPose: string;
+  frames: string[];
+}
+interface Manifest {
+  frameSize: { width: number; height: number };
+  layers: { id: string; type: string; image?: string }[];
+  atlases: Record<string, Sheet>;
+  frames: Record<string, Cell>;
+  animations: Record<string, Sequence>;
+  stateMachine: {
+    initialAnimation: string;
+    transitions: { from: string; to: string; animation: string }[];
+  };
+}
+
+/** While she works at the desk, break the typing up now and then. */
+const DESK_VARIETY = 4;
 
 export function createMascot(canvas: HTMLCanvasElement): Mascot {
   const ctx = canvas.getContext("2d")!;
@@ -54,20 +74,128 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
   let working = false;
   let level = 0;
   let smoothLevel = 0;
-
-  // Pose, all eased towards their targets so nothing snaps.
-  let turn = 0; // -1 looking left, +1 right
-  let lean = 0; // forward lean, 0..1
-  let armL = 0; // 0 resting, 1 raised
-  let armR = 0;
-  let targetTurn = 0;
-  let nextGlance = 0;
-  let waveUntil = 0;
-  let blinkUntil = 0;
-  let nextBlink = 1.6;
-  let enteredAt = 0;
+  let disposed = false;
   let raf = 0;
-  const start = performance.now() / 1000;
+
+  let manifest: Manifest | null = null;
+  let desk: HTMLImageElement | null = null;
+  const sheets = new Map<string, HTMLImageElement>();
+
+  let current = "repos";
+  let frame = 0;
+  let lastStep = 0;
+  let loops = 0;
+  // A one-shot she owes us as soon as she is in the right pose: a wave when
+  // she first turns round, a nod or a look at the montage when work lands.
+  let owed: string | null = null;
+
+  const reduced = globalThis.matchMedia?.(
+    "(prefers-reduced-motion: reduce)",
+  )?.matches;
+
+  /** Facing us answers to the conversation, never to the work. */
+  function facing(): boolean {
+    return (
+      state === "listening" ||
+      state === "speaking" ||
+      state === "done" ||
+      state === "error"
+    );
+  }
+
+  /** The loop she settles into, once she is in the right pose. */
+  function settled(): string {
+    if (facing()) return "ecouter";
+    if (!working) return "repos";
+    // thinking survives only as an alias for work on the state axis.
+    return loops % DESK_VARIETY === DESK_VARIETY - 1
+      ? "parcourir_timeline"
+      : "taper";
+  }
+
+  /**
+   * What to play once the running sequence reaches its end.
+   *
+   * A sequence can only follow one it joins cleanly, so this either plays
+   * what we want, or the transition that puts her in the pose it needs.
+   */
+  function pick(): string {
+    const here = manifest!.animations[current].endPose;
+    if (owed && manifest!.animations[owed]?.startPose === here) {
+      const next = owed;
+      owed = null;
+      return next;
+    }
+    const want = settled();
+    if (manifest!.animations[want].startPose === here) return want;
+    const bridge = manifest!.stateMachine.transitions.find(
+      (t) => t.from === here && t.to === manifest!.animations[want].startPose,
+    );
+    return bridge ? bridge.animation : current;
+  }
+
+  function play(id: string): void {
+    if (id === current) return;
+    current = id;
+    frame = 0;
+    loops = 0;
+  }
+
+  function step(now: number): void {
+    const sequence = manifest!.animations[current];
+    if (now - lastStep < 1000 / sequence.fps) return;
+    lastStep = now;
+
+    // A loop can be left on any frame. Waiting for its last one is what the
+    // asset notes suggest, but `repos` runs 21 frames: measured, she took
+    // up to 2.5s to so much as begin turning round, which reads as being
+    // ignored. Every loop here sits in a single pose, so leaving it early
+    // costs at most a frame of snap against a visibly dead pause.
+    if (sequence.loop) {
+      const early = pick();
+      if (early !== current) {
+        play(early);
+        return;
+      }
+    }
+
+    frame += 1;
+    if (frame < sequence.frames.length) return;
+    frame = 0;
+    loops += 1;
+    // A one-shot always plays out -- cutting the wave or the nod in half is
+    // what makes a character look broken -- and then hands over to whatever
+    // it declares as next if nothing better is waiting.
+    const next = pick();
+    if (next !== current) play(next);
+    else if (!sequence.loop && sequence.next) play(sequence.next);
+  }
+
+  function draw(): void {
+    const size = Math.min(canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!manifest || !desk) return;
+    // A breath on her voice: the sheets have no mouth shapes, so the level
+    // moves the whole figure a little rather than pretending to lip-sync.
+    const bob = state === "speaking" ? smoothLevel * size * 0.015 : 0;
+    const x = (canvas.width - size) / 2;
+    const y = (canvas.height - size) / 2 - bob;
+    ctx.drawImage(desk, x, y, size, size);
+    const cell = manifest.frames[manifest.animations[current].frames[frame]];
+    const sheet = sheets.get(cell.atlas);
+    if (!sheet) return;
+    ctx.drawImage(
+      sheet,
+      cell.x,
+      cell.y,
+      cell.width,
+      cell.height,
+      x,
+      y,
+      size,
+      size,
+    );
+  }
 
   function resize(): void {
     const rect = canvas.getBoundingClientRect();
@@ -80,234 +208,59 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     }
   }
 
-  /** A rounded hood: one dome over a wider body, drawn as a single path. */
-  function silhouette(): void {
-    ctx.beginPath();
-    ctx.moveTo(18, 120);
-    ctx.bezierCurveTo(10, 86, 14, 44, 44, 30);
-    ctx.bezierCurveTo(56, 24, 70, 24, 82, 31);
-    ctx.bezierCurveTo(110, 46, 113, 87, 105, 120);
-    ctx.bezierCurveTo(88, 127, 36, 127, 18, 120);
-    ctx.closePath();
-  }
-
-  function draw(t: number): void {
-    const since = t - enteredAt;
+  function tick(now: number): void {
+    if (disposed) return;
+    raf = requestAnimationFrame(tick);
     resize();
-    const dpr = canvas.width / W;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    smoothLevel = ease(smoothLevel, level, 0.25);
-
-    // --- what the pose should be ------------------------------------
-    // Her head and her hands are separate. Working is not a phase she
-    // enters and leaves: you talk to her through it, and she looks up
-    // while her hands keep going. So the branches below choose the HEAD
-    // only, attention first, and the work branch is what is left when
-    // nothing is being said -- the arms read `busy` on their own.
-    let wantLean = 0;
-    if (state === "listening") {
-      targetTurn = Math.sin(t * 1.5) * 0.06;
-      wantLean = 0.5 + smoothLevel * 0.3;
-    } else if (state === "speaking") {
-      targetTurn = Math.sin(t * 1.1) * 0.08;
-      wantLean = 0.25;
-    } else if (state === "done") {
-      targetTurn = 0;
-      wantLean = 0.1;
-    } else if (working || state === "thinking") {
-      // Head down over the work, turned a little away: busy, not watching.
-      targetTurn = -0.45 + Math.sin(t * 2.2) * 0.08;
-      wantLean = 1;
-    } else {
-      // Idle: look around, and wave now and then.
-      if (t > nextGlance) {
-        targetTurn = (Math.random() * 2 - 1) * 0.7;
-        nextGlance = t + 1.4 + Math.random() * 2.4;
-        if (Math.random() < 0.3) waveUntil = t + 1.6;
-      }
-      wantLean = 0;
-    }
-    turn = ease(turn, targetTurn, 0.08);
-    lean = ease(lean, wantLean, 0.09);
-
-    const busy = state === "thinking" || working;
-    // Talking to her wins her eyes, whatever her hands are doing.
-    const attending =
-      state === "listening" || state === "speaking" || state === "done";
-    const waving = t < waveUntil && !busy;
-    // While working the two hands alternate, so the tapping reads as hands
-    // rather than as one shape moving.
-    armL = ease(armL, busy ? 0.5 + Math.sin(t * 11) * 0.5 : 0, 0.3);
-    armR = ease(
-      armR,
-      busy ? 0.5 + Math.sin(t * 11 + Math.PI) * 0.5 : waving ? 1 : 0,
-      0.3,
-    );
-
-    const hop = state === "done" ? Math.max(0, Math.sin(since * 7)) * 7 : 0;
-    const bob = Math.sin(t * (busy ? 3.2 : 1.6)) * 1.8;
-
-    ctx.save();
-    ctx.translate(0, -bob - hop);
-    // Lean tips the whole figure forward from its feet.
-    ctx.translate(W / 2, H);
-    ctx.rotate(lean * 0.1 + turn * 0.04);
-    ctx.translate(-W / 2, -H);
-
-    // --- shadow ------------------------------------------------------
-    ctx.globalAlpha = 0.18 - lean * 0.04;
-    ctx.fillStyle = "#000";
-    ctx.beginPath();
-    ctx.ellipse(62, 126 + bob * 0.6, 30 - hop * 0.6, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Waving reaches up and out and passes behind the body; the working
-    // hands stay low and close, and must be drawn IN FRONT or the body
-    // hides them -- which is why "working" used to look like "idle".
-    const arms = (): void => {
-      ctx.strokeStyle = SHELL_SHADE;
-      ctx.lineWidth = 13;
-      ctx.lineCap = "round";
-      for (const [side, raise] of [
-        [-1, armL],
-        [1, armR],
-      ] as const) {
-        const shoulderX = 62 + side * 24;
-        // The tapping hands sit on the body's bottom edge: anywhere higher
-        // and they are the same cream on cream, invisible against it.
-        const [x, y] = busy
-          ? [62 + side * 17, 119 + raise * 7]
-          : [shoulderX + side * (3 + raise * 18), 97 - raise * 46];
-        ctx.beginPath();
-        ctx.moveTo(shoulderX, 92);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-      }
-    };
-    if (!busy) arms();
-
-    // --- body --------------------------------------------------------
-    silhouette();
-    ctx.fillStyle = SHELL;
-    ctx.fill();
-    if (busy) arms();
-
-    // --- face plate ---------------------------------------------------
-    const faceX = 62 + turn * 15;
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(faceX, 62 - lean * 5, 27 - Math.abs(turn) * 6, 29, 0, 0, Math.PI * 2);
-    ctx.fillStyle = FACE;
-    ctx.fill();
-    ctx.clip();
-
-    // eyes
-    const blinking = t < blinkUntil;
-    const squint = busy && !attending ? 0.42 : state === "done" ? 0.3 : 1;
-    const open = blinking ? 0.08 : squint;
-    ctx.fillStyle = INK;
-    for (const side of [-1, 1] as const) {
-      const ex = faceX + side * (9 - Math.abs(turn) * 2) + turn * 4;
-      const ey = 58 - lean * 5 + (busy && !attending ? 4 : 0);
-      ctx.beginPath();
-      ctx.ellipse(ex, ey, 3.6, 4.4 * open, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // blush
-    ctx.fillStyle = BLUSH;
-    for (const side of [-1, 1] as const) {
-      ctx.beginPath();
-      ctx.ellipse(faceX + side * 18 + turn * 4, 69 - lean * 5, 5.5, 3.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // mouth: a small arc, opening with the voice while speaking
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.9;
-    ctx.beginPath();
-    const mouthY = 71 - lean * 5;
-    if (state === "speaking" && smoothLevel > 0.05) {
-      ctx.ellipse(faceX + turn * 4, mouthY, 3.4, 1.6 + smoothLevel * 3.4, 0, 0, Math.PI * 2);
-    } else {
-      ctx.arc(faceX + turn * 4, mouthY - 2.4, 4, 0.25 * Math.PI, 0.75 * Math.PI);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    // --- hood rim, drawn over the face so the opening reads ----------
-    ctx.save();
-    silhouette();
-    ctx.clip();
-    ctx.strokeStyle = SHELL;
-    ctx.lineWidth = 13;
-    ctx.beginPath();
-    ctx.ellipse(faceX, 62 - lean * 5, 33 - Math.abs(turn) * 6, 35, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    // A shaded inner edge is what separates hood from face at 120 px; the
-    // two creams are too close to tell apart on their own.
-    ctx.strokeStyle = SHELL_SHADE;
-    ctx.lineWidth = 2.5;
-    ctx.globalAlpha = 0.85;
-    ctx.beginPath();
-    ctx.ellipse(faceX, 62 - lean * 5, 27 - Math.abs(turn) * 6, 29, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // --- what she is doing -------------------------------------------
-    // Two independent signs, both allowed at once: she can be working and
-    // listening in the same frame, and showing only one of the two is what
-    // made the interface look like it had phases.
-    if (busy) {
-      // Three ticks rising off the work: the visual of being mid-task.
-      // Amber, never ACCENT[state], or the sign of work would change
-      // colour just because you started speaking.
-      ctx.fillStyle = WORK;
-      for (let i = 0; i < 3; i += 1) {
-        const phase = (t * 1.5 + i * 0.33) % 1;
-        ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.75;
-        ctx.beginPath();
-        ctx.arc(96 + i * 7, 44 - phase * 22, 2.4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-    if (state === "listening") {
-      // A ring that breathes with the microphone.
-      ctx.strokeStyle = LIVE;
-      ctx.globalAlpha = 0.25 + smoothLevel * 0.55;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(62, 76, 48 + smoothLevel * 10, 54 + smoothLevel * 10, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.restore();
-
-    if (t > nextBlink && !busy) {
-      blinkUntil = t + 0.12;
-      nextBlink = t + 2.2 + Math.random() * 3.5;
-    }
+    smoothLevel += (level - smoothLevel) * 0.25;
+    if (manifest && !reduced) step(now);
+    draw();
   }
 
-  function frame(): void {
-    raf = requestAnimationFrame(frame);
-    draw(performance.now() / 1000 - start);
+  async function load(): Promise<void> {
+    const response = await fetch(ASSETS + "jolly-animations.json");
+    if (!response.ok)
+      throw new Error("Jolly did not load (HTTP " + response.status + ").");
+    const loaded = (await response.json()) as Manifest;
+
+    async function image(file: string): Promise<HTMLImageElement> {
+      const element = new Image();
+      element.src = ASSETS + file;
+      await element.decode();
+      return element;
+    }
+
+    const still = loaded.layers.find((layer) => layer.id === "poste");
+    const [deskImage, atlases] = await Promise.all([
+      image(still!.image!),
+      Promise.all(
+        Object.entries(loaded.atlases).map(
+          async ([id, atlas]) => [id, await image(atlas.image)] as const,
+        ),
+      ),
+    ]);
+    if (disposed) return;
+    desk = deskImage;
+    for (const [id, element] of atlases) sheets.set(id, element);
+    current = loaded.stateMachine.initialAnimation;
+    manifest = loaded;
   }
-  frame();
+
+  void load().catch((error: unknown) => {
+    // She is decoration: never take the editor down with her.
+    console.warn("Mascot disabled:", error);
+  });
+  raf = requestAnimationFrame(tick);
 
   return {
     setState(next) {
       if (next === state) return;
+      const wasFacing = facing();
       state = next;
-      enteredAt = performance.now() / 1000 - start;
-      if (next === "idle") nextGlance = 0;
-      // Greet whoever just turned up.
-      if (next === "listening") waveUntil = 0;
-      if (next === "done") waveUntil = enteredAt + 1.2;
+      // Turning round to you is worth a wave; a result she can show you is
+      // worth a nod, or a look back at the montage if she never turned.
+      if (!wasFacing && facing() && next !== "done") owed = "saluer";
+      if (next === "done") owed = facing() ? "acquiescer" : "verifier_montage";
     },
     setWorking(next) {
       working = next;
@@ -316,6 +269,7 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
       level = Math.min(1, Math.max(0, next));
     },
     dispose() {
+      disposed = true;
       cancelAnimationFrame(raf);
     },
   };

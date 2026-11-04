@@ -1228,3 +1228,24 @@ body[data-working="true"] .muse {
     height: 65px;
   }
 }
+
+/* Jolly's frames are a square 256x256 scene -- desk, screen, keyboard and
+   stool, with her placed on the stool -- so the box has to be square or
+   the whole desk letterboxes inside it. */
+.muse {
+  width: 116px;
+  height: 116px;
+  align-self: center;
+}
+.muse canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
+}
+@media (max-width: 900px) {
+  .muse {
+    width: 84px;
+    height: 84px;
+  }
+}

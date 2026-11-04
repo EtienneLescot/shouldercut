@@ -1,0 +1,683 @@
+{
+  "format": "jolly-sprite-atlas-v2",
+  "frameSize": {
+    "width": 256,
+    "height": 256
+  },
+  "coordinateOrigin": "top-left",
+  "alphaMode": "straight",
+  "anchor": {
+    "x": 128,
+    "y": 244
+  },
+  "layers": [
+    {
+      "id": "poste",
+      "type": "static",
+      "image": "jolly-poste.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "mascotte",
+      "type": "animated",
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "atlases": {
+    "pivot": {
+      "image": "jolly-pivot.png",
+      "width": 768,
+      "height": 768,
+      "columns": 3,
+      "rows": 3
+    },
+    "ecoute": {
+      "image": "jolly-ecoute.png",
+      "width": 1792,
+      "height": 768,
+      "columns": 7,
+      "rows": 3
+    },
+    "montage": {
+      "image": "jolly-montage.png",
+      "width": 1792,
+      "height": 768,
+      "columns": 7,
+      "rows": 3
+    }
+  },
+  "frames": {
+    "pivot/00": {
+      "atlas": "pivot",
+      "x": 0,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/01": {
+      "atlas": "pivot",
+      "x": 256,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/02": {
+      "atlas": "pivot",
+      "x": 512,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/03": {
+      "atlas": "pivot",
+      "x": 0,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/04": {
+      "atlas": "pivot",
+      "x": 256,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/05": {
+      "atlas": "pivot",
+      "x": 512,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/06": {
+      "atlas": "pivot",
+      "x": 0,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/07": {
+      "atlas": "pivot",
+      "x": 256,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "pivot/08": {
+      "atlas": "pivot",
+      "x": 512,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/01": {
+      "atlas": "ecoute",
+      "x": 0,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/02": {
+      "atlas": "ecoute",
+      "x": 256,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/03": {
+      "atlas": "ecoute",
+      "x": 512,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/04": {
+      "atlas": "ecoute",
+      "x": 768,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/05": {
+      "atlas": "ecoute",
+      "x": 1024,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/06": {
+      "atlas": "ecoute",
+      "x": 1280,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "ecouter/07": {
+      "atlas": "ecoute",
+      "x": 1536,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/01": {
+      "atlas": "ecoute",
+      "x": 0,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/02": {
+      "atlas": "ecoute",
+      "x": 256,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/03": {
+      "atlas": "ecoute",
+      "x": 512,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/04": {
+      "atlas": "ecoute",
+      "x": 768,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/05": {
+      "atlas": "ecoute",
+      "x": 1024,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/06": {
+      "atlas": "ecoute",
+      "x": 1280,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "saluer/07": {
+      "atlas": "ecoute",
+      "x": 1536,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/01": {
+      "atlas": "ecoute",
+      "x": 0,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/02": {
+      "atlas": "ecoute",
+      "x": 256,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/03": {
+      "atlas": "ecoute",
+      "x": 512,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/04": {
+      "atlas": "ecoute",
+      "x": 768,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/05": {
+      "atlas": "ecoute",
+      "x": 1024,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/06": {
+      "atlas": "ecoute",
+      "x": 1280,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "acquiescer/07": {
+      "atlas": "ecoute",
+      "x": 1536,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "taper/01": {
+      "atlas": "montage",
+      "x": 0,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/02": {
+      "atlas": "montage",
+      "x": 256,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/03": {
+      "atlas": "montage",
+      "x": 512,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/04": {
+      "atlas": "montage",
+      "x": 768,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/05": {
+      "atlas": "montage",
+      "x": 1024,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/06": {
+      "atlas": "montage",
+      "x": 1280,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "taper/07": {
+      "atlas": "montage",
+      "x": 1536,
+      "y": 0,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/01": {
+      "atlas": "montage",
+      "x": 0,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/02": {
+      "atlas": "montage",
+      "x": 256,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/03": {
+      "atlas": "montage",
+      "x": 512,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/04": {
+      "atlas": "montage",
+      "x": 768,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/05": {
+      "atlas": "montage",
+      "x": 1024,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/06": {
+      "atlas": "montage",
+      "x": 1280,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "parcourir_timeline/07": {
+      "atlas": "montage",
+      "x": 1536,
+      "y": 256,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/01": {
+      "atlas": "montage",
+      "x": 0,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/02": {
+      "atlas": "montage",
+      "x": 256,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/03": {
+      "atlas": "montage",
+      "x": 512,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/04": {
+      "atlas": "montage",
+      "x": 768,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/05": {
+      "atlas": "montage",
+      "x": 1024,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/06": {
+      "atlas": "montage",
+      "x": 1280,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    },
+    "verifier_montage/07": {
+      "atlas": "montage",
+      "x": 1536,
+      "y": 512,
+      "width": 256,
+      "height": 256
+    }
+  },
+  "animations": {
+    "repos": {
+      "label": "Repos au poste",
+      "fps": 12,
+      "durationMs": 1750.0,
+      "loop": true,
+      "startPose": "poste",
+      "endPose": "poste",
+      "next": null,
+      "frames": [
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/01",
+        "pivot/02",
+        "pivot/01",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00",
+        "pivot/00"
+      ]
+    },
+    "se_retourner": {
+      "label": "Se retourner",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": false,
+      "startPose": "poste",
+      "endPose": "ecoute",
+      "next": "ecouter",
+      "frames": [
+        "pivot/00",
+        "pivot/01",
+        "pivot/02",
+        "pivot/03",
+        "pivot/04",
+        "pivot/05",
+        "pivot/06",
+        "pivot/07",
+        "pivot/08"
+      ]
+    },
+    "ecouter": {
+      "label": "Écouter",
+      "fps": 12,
+      "durationMs": 2166.667,
+      "loop": true,
+      "startPose": "ecoute",
+      "endPose": "ecoute",
+      "next": null,
+      "frames": [
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "ecouter/01",
+        "ecouter/02",
+        "ecouter/03",
+        "ecouter/04",
+        "ecouter/05",
+        "ecouter/06",
+        "ecouter/07",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08",
+        "pivot/08"
+      ]
+    },
+    "saluer": {
+      "label": "Saluer",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": false,
+      "startPose": "ecoute",
+      "endPose": "ecoute",
+      "next": "ecouter",
+      "frames": [
+        "pivot/08",
+        "saluer/01",
+        "saluer/02",
+        "saluer/03",
+        "saluer/04",
+        "saluer/05",
+        "saluer/06",
+        "saluer/07",
+        "pivot/08"
+      ]
+    },
+    "acquiescer": {
+      "label": "Acquiescer",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": false,
+      "startPose": "ecoute",
+      "endPose": "ecoute",
+      "next": "ecouter",
+      "frames": [
+        "pivot/08",
+        "acquiescer/01",
+        "acquiescer/02",
+        "acquiescer/03",
+        "acquiescer/04",
+        "acquiescer/05",
+        "acquiescer/06",
+        "acquiescer/07",
+        "pivot/08"
+      ]
+    },
+    "reprendre": {
+      "label": "Revenir au montage",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": false,
+      "startPose": "ecoute",
+      "endPose": "poste",
+      "next": "repos",
+      "frames": [
+        "pivot/08",
+        "pivot/07",
+        "pivot/06",
+        "pivot/05",
+        "pivot/04",
+        "pivot/03",
+        "pivot/02",
+        "pivot/01",
+        "pivot/00"
+      ]
+    },
+    "taper": {
+      "label": "Taper au clavier",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": true,
+      "startPose": "poste",
+      "endPose": "poste",
+      "next": null,
+      "frames": [
+        "pivot/00",
+        "taper/01",
+        "taper/02",
+        "taper/03",
+        "taper/04",
+        "taper/05",
+        "taper/06",
+        "taper/07",
+        "pivot/00"
+      ]
+    },
+    "parcourir_timeline": {
+      "label": "Pointer la timeline",
+      "fps": 12,
+      "durationMs": 750.0,
+      "loop": true,
+      "startPose": "poste",
+      "endPose": "poste",
+      "next": null,
+      "frames": [
+        "pivot/00",
+        "parcourir_timeline/01",
+        "parcourir_timeline/02",
+        "parcourir_timeline/03",
+        "parcourir_timeline/04",
+        "parcourir_timeline/05",
+        "parcourir_timeline/06",
+        "parcourir_timeline/07",
+        "pivot/00"
+      ]
+    },
+    "verifier_montage": {
+      "label": "Vérifier le montage",
+      "fps": 12,
+      "durationMs": 1083.333,
+      "loop": false,
+      "startPose": "poste",
+      "endPose": "poste",
+      "next": "repos",
+      "frames": [
+        "pivot/00",
+        "verifier_montage/01",
+        "verifier_montage/02",
+        "verifier_montage/03",
+        "verifier_montage/04",
+        "verifier_montage/04",
+        "verifier_montage/04",
+        "verifier_montage/04",
+        "verifier_montage/04",
+        "verifier_montage/05",
+        "verifier_montage/06",
+        "verifier_montage/07",
+        "pivot/00"
+      ]
+    }
+  },
+  "stateMachine": {
+    "initialAnimation": "repos",
+    "anchorFrames": {
+      "poste": "pivot/00",
+      "ecoute": "pivot/08"
+    },
+    "transitions": [
+      {
+        "from": "poste",
+        "to": "ecoute",
+        "animation": "se_retourner"
+      },
+      {
+        "from": "ecoute",
+        "to": "poste",
+        "animation": "reprendre"
+      }
+    ],
+    "loopExit": "after-last-frame"
+  },
+  "demo": [
+    {
+      "animation": "repos",
+      "cycles": 1
+    },
+    {
+      "animation": "se_retourner",
+      "cycles": 1
+    },
+    {
+      "animation": "ecouter",
+      "cycles": 1
+    },
+    {
+      "animation": "saluer",
+      "cycles": 1
+    },
+    {
+      "animation": "acquiescer",
+      "cycles": 1
+    },
+    {
+      "animation": "reprendre",
+      "cycles": 1
+    },
+    {
+      "animation": "taper",
+      "cycles": 3
+    },
+    {
+      "animation": "parcourir_timeline",
+      "cycles": 2
+    },
+    {
+      "animation": "verifier_montage",
+      "cycles": 1
+    }
+  ]
+}
