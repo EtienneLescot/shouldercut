@@ -14,8 +14,9 @@
 //
 // That maps onto the app's axes without flattening them. Which way she
 // faces answers to the conversation; what her hands do answers to the work.
-// Talking to her while she works turns her round without stopping the work:
-// when you are done she goes back to the desk and picks the typing up again.
+// She turns round to answer you without stopping the work, then goes back to
+// the desk -- but only for something actually said. A live voice session
+// holds `listening` from end to end, so that one state waits for idle hands.
 
 export type MascotState =
   | "idle"
@@ -93,13 +94,22 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     "(prefers-reduced-motion: reduce)",
   )?.matches;
 
-  /** Facing us answers to the conversation, never to the work. */
+  /**
+   * Whether she is turned round to us.
+   *
+   * Speaking, showing a result, reporting a failure: those turn her round
+   * mid-task, which is the point of talking over her shoulder. `listening`
+   * is different -- a voice session leaves it on for its whole length, as
+   * the resting state of the conversation rather than a moment in it. Faced
+   * on that, she sat watching us through entire generations with her hands
+   * still, so it only turns her round once there is nothing in them.
+   */
   function facing(): boolean {
     return (
-      state === "listening" ||
       state === "speaking" ||
       state === "done" ||
-      state === "error"
+      state === "error" ||
+      (state === "listening" && !working)
     );
   }
 

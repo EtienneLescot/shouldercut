@@ -206,11 +206,11 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
         });
         meter = ui.meter(new MediaStream([mic.mediaStreamTrack]));
         ui.pause();
-        if (label) label.textContent = "Terminer";
+        if (label) label.textContent = "End";
         ui.button.setAttribute("aria-pressed", "true");
         ui.state("listening");
         ui.status.textContent =
-          "En attente de la voix · micro : " + mic.mediaStreamTrack.label;
+          "Waiting for the voice · mic: " + mic.mediaStreamTrack.label;
         silenceTimer = setTimeout(() => {
           if (meter && meter.peak() < 3)
             ui.status.textContent =
