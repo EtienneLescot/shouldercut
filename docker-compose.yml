@@ -1,0 +1,84 @@
+# ShoulderCut, in containers.
+#
+#   docker compose up                          the editor alone
+#   docker compose --profile voice up          + LiveKit and the voice worker
+#   docker compose --profile comfy up          + a ComfyUI on your own GPU
+#
+# Generation has three homes and the editor does not care which you pick,
+# because every call goes through COMFY_URL or the hosted provider:
+#
+#   1. Hosted (fal.ai). Set FAL_KEY and nothing else. Works without a GPU.
+#   2. A ComfyUI you already run on this machine. Leave the comfy profile
+#      off and set COMFY_URL=http://host.docker.internal:8188.
+#   3. The comfy profile below, on an NVIDIA GPU in this compose file.
+#   4. A ComfyUI somewhere else entirely -- a serverless deployment, another
+#      machine on your network. Point COMFY_URL at it.
+
+name: shouldercut
+
+services:
+  editor:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Reachable from outside the container; see vite.config.ts.
+      SHOULDERCUT_HOST: 0.0.0.0
+      # Overridden by .env if you set it there.
+      COMFY_URL: ${COMFY_URL:-http://host.docker.internal:8188}
+    ports:
+      - "5173:5173"
+    volumes:
+      # Your footage and the generated results survive `docker compose down`.
+      - ./server/gen-output:/app/server/gen-output
+      - ./.runtime:/app/.runtime
+    extra_hosts:
+      # So COMFY_URL can reach a ComfyUI running on the host, on Linux too.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  livekit:
+    profiles: ["voice"]
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    restart: unless-stopped
+
+  voice:
+    profiles: ["voice"]
+    build: ./voice
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the editor and LiveKit answer by name.
+      SHOULDERCUT_BRIDGE: http://editor:5173
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+    depends_on:
+      - editor
+      - livekit
+    restart: unless-stopped
+
+  comfy:
+    profiles: ["comfy"]
+    image: ${COMFY_IMAGE:-yanwk/comfyui-boot:cu124-slim}
+    ports:
+      - "8188:8188"
+    volumes:
+      # The weights are yours and they stay yours: tens of gigabytes that
+      # belong in a volume, never inside an image. Point COMFY_MODELS_DIR at
+      # the models directory of a ComfyUI you already have.
+      - ${COMFY_MODELS_DIR:-./comfy-models}:/root/ComfyUI/models
+      - ./server/comfy-workflows:/root/ComfyUI/user/default/workflows:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped

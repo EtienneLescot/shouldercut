@@ -54,9 +54,14 @@ export default defineConfig(({ mode }) => {
       // SHOULDERCUT_HOST stays available for anyone who wants to narrow it
       // and can live without the local tools.
       //
+      // SHOULDERCUT_HOST is honoured whether or not a key is set, because
+      // it is an explicit instruction and loopback is not always where the
+      // user is: inside a container, 127.0.0.1 is the container, so the
+      // compose file sets 0.0.0.0 and the port mapping does the rest.
+      //
       // This is the only place that decides: the npm scripts no longer pass
       // --host, so they inherit it.
-      host: gated ? env.SHOULDERCUT_HOST || true : '127.0.0.1',
+      host: env.SHOULDERCUT_HOST || (gated ? true : '127.0.0.1'),
       https: tls,
     },
   };

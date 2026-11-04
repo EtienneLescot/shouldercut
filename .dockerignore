@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+.claude
+.runtime
+.certs
+.env
+voice/.venv
+voice/__pycache__
+**/__pycache__
+server/gen-output
+*.log
