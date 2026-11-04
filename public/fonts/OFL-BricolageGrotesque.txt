@@ -1,0 +1,9 @@
+Copyright 2022 The Bricolage Grotesque Project Authors
+(https://github.com/ateliertriangle/Bricolage-Grotesque)
+
+Bricolage Grotesque is licensed under the SIL Open Font License,
+Version 1.1 -- the same licence text as OFL.txt in this directory,
+which applies to it in full.
+
+Shipped here as two subsets (latin, latin-ext) rather than fetched from
+fonts.googleapis.com, so a demo never waits on the network.

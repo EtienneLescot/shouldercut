@@ -106,18 +106,33 @@ for (const event of ["pointermove", "pointerdown", "keydown", "wheel"]) {
   window.addEventListener(event, stirChrome, { passive: true });
 }
 stirChrome();
-let voiceWorking = false,
+// Speaking is permanent, and the statuses are independent: you talk to Muse
+// while she works, and you interrupt her with a new instruction. So work is
+// an axis of its own -- body[data-working], the mascot's hands, the trail --
+// and it never writes to data-ui, which carries only what is being said.
+// Folding work into the ui state is what used to drop her listening pose the
+// moment an edit began, and what made the two look like separate phases.
+let chatWorking = false,
+  voiceWorking = false,
   supervisorWorking = false,
   generationWorking = false,
-  actionWorking = false;
+  actionWorking = false,
+  trailOpen = false;
 function updateWorking(): void {
   const working =
-    voiceWorking || supervisorWorking || generationWorking || actionWorking;
+    chatWorking ||
+    voiceWorking ||
+    supervisorWorking ||
+    generationWorking ||
+    actionWorking;
+  // One owner for the trail's lifetime, so no path can leave it counting.
+  if (working !== trailOpen) {
+    if (working) trail.begin("Muse prend la demande");
+    else trail.end();
+    trailOpen = working;
+  }
   muse.setWorking(working);
   document.body.dataset.working = String(working);
-  if (working && document.body.dataset.ui === "idle") setUiState("thinking");
-  else if (!working && document.body.dataset.ui === "thinking")
-    setUiState("idle");
 }
 let doneTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -130,18 +145,9 @@ function setUiState(next: MascotState): void {
     doneTimer = null;
   }
   if (next === "done" || next === "error") {
-    doneTimer = setTimeout(
-      () =>
-        setUiState(
-          voiceWorking ||
-            supervisorWorking ||
-            generationWorking ||
-            actionWorking
-            ? "thinking"
-            : "idle",
-        ),
-      1600,
-    );
+    // Back to resting attention, whether or not she is still working:
+    // the work shows on its own axis.
+    doneTimer = setTimeout(() => setUiState("idle"), 1600);
   }
 }
 
@@ -251,6 +257,13 @@ function renderProject(next: ProjectPayload): void {
     button.type = "button";
     button.className =
       "clip-item" + (clip.id === activeClipId ? " active" : "");
+    // The strip is a ribbon of shots, each as wide as it is long. Equal
+    // chips read as tabs and say nothing about the shape of the montage.
+    // The floor keeps a one-second shot from collapsing to a sliver.
+    button.style.setProperty(
+      "--span",
+      String(Math.max(0.35, clip.out - clip.in)),
+    );
     button.textContent =
       next.clips.indexOf(clip) +
       1 +
@@ -619,7 +632,6 @@ function connectBridge(): void {
       working: boolean;
       phase?: string;
     };
-    const wasWorking = supervisorWorking;
     supervisorWorking = Boolean(progress.working);
     updateWorking();
     agentStatus!.textContent = supervisorWorking
@@ -627,10 +639,9 @@ function connectBridge(): void {
       : "À votre écoute";
     // Every tool the agent calls reaches us here. Lay them out as they
     // arrive instead of overwriting one line, so the wait has a shape.
-    const label = progress.phase || "Muse travaille sur la vidéo";
-    if (supervisorWorking && !wasWorking) trail.begin(label);
-    else if (supervisorWorking) trail.step(label);
-    else if (wasWorking) trail.end();
+    // updateWorking opens and closes the trail; this only adds to it.
+    if (supervisorWorking)
+      trail.step(progress.phase || "Muse travaille sur la vidéo");
   });
   events.addEventListener("assistant-action", (event) => {
     const p = JSON.parse((event as MessageEvent<string>).data);
@@ -1377,16 +1388,23 @@ setupRealtimeVoice({
   message: addChatMessage,
   pause: () => send({ type: "pause" }),
 });
+// You can always say the next thing, including over an instruction that is
+// still running: Muse is interruptible, so nothing waits on the previous
+// round trip. Clearing the field is what stops a double Enter from sending
+// twice; the button used to stay dead for the whole wait, which could be
+// seventeen seconds of being unable to correct yourself.
+let chatPending = 0;
 chatForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const message = chatInput.value.trim();
-  if (!message || chatSendBtn.disabled) return;
+  if (!message) return;
   chatInput.value = "";
   addChatMessage("user", message);
-  chatSendBtn.disabled = true;
+  chatPending += 1;
+  chatWorking = true;
+  updateWorking();
   errorText.textContent = "";
   agentStatus.textContent = "Je vous écoute…";
-  setUiState("thinking");
   void fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1412,7 +1430,7 @@ chatForm.addEventListener("submit", (event) => {
       agentStatus.textContent = payload.editing
         ? "Montage en cours…"
         : "À votre écoute";
-      setUiState(payload.editing ? "thinking" : "done");
+      setUiState("done");
     })
     .catch((error: unknown) => {
       const text = error instanceof Error ? error.message : String(error);
@@ -1422,7 +1440,9 @@ chatForm.addEventListener("submit", (event) => {
       setUiState("error");
     })
     .finally(() => {
-      chatSendBtn.disabled = false;
+      chatPending -= 1;
+      chatWorking = chatPending > 0;
+      updateWorking();
       chatInput.focus();
     });
 });

@@ -33,14 +33,12 @@ const FACE = "#fdf7ec";
 const INK = "#20242c";
 const BLUSH = "rgba(238, 150, 140, 0.55)";
 
-const ACCENT: Record<MascotState, string> = {
-  idle: "#6ee7b7",
-  listening: "#f87171",
-  speaking: "#287bff",
-  thinking: "#818cf8",
-  done: "#3ddc97",
-  error: "#f59e0b",
-};
+// Only two signs get drawn, and either can be on without the other: amber
+// for work under way, coral for an open microphone. Same two meanings as
+// the stylesheet. A colour per state was the wrong shape -- it assumed she
+// could only be in one of them at a time.
+const WORK = "#d9a441";
+const LIVE = "#e8705a";
 
 /** Design space; the canvas scales to fit whatever box the layout gives. */
 const W = 120;
@@ -103,6 +101,11 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     smoothLevel = ease(smoothLevel, level, 0.25);
 
     // --- what the pose should be ------------------------------------
+    // Her head and her hands are separate. Working is not a phase she
+    // enters and leaves: you talk to her through it, and she looks up
+    // while her hands keep going. So the branches below choose the HEAD
+    // only, attention first, and the work branch is what is left when
+    // nothing is being said -- the arms read `busy` on their own.
     let wantLean = 0;
     if (state === "listening") {
       targetTurn = Math.sin(t * 1.5) * 0.06;
@@ -110,13 +113,13 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     } else if (state === "speaking") {
       targetTurn = Math.sin(t * 1.1) * 0.08;
       wantLean = 0.25;
-    } else if (state === "thinking" || working) {
-      // Head down over the work, turned a little away: busy, not watching.
-      targetTurn = -0.45 + Math.sin(t * 2.2) * 0.08;
-      wantLean = 1;
     } else if (state === "done") {
       targetTurn = 0;
       wantLean = 0.1;
+    } else if (working || state === "thinking") {
+      // Head down over the work, turned a little away: busy, not watching.
+      targetTurn = -0.45 + Math.sin(t * 2.2) * 0.08;
+      wantLean = 1;
     } else {
       // Idle: look around, and wave now and then.
       if (t > nextGlance) {
@@ -130,6 +133,9 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     lean = ease(lean, wantLean, 0.09);
 
     const busy = state === "thinking" || working;
+    // Talking to her wins her eyes, whatever her hands are doing.
+    const attending =
+      state === "listening" || state === "speaking" || state === "done";
     const waving = t < waveUntil && !busy;
     // While working the two hands alternate, so the tapping reads as hands
     // rather than as one shape moving.
@@ -200,12 +206,12 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
 
     // eyes
     const blinking = t < blinkUntil;
-    const squint = busy ? 0.42 : state === "done" ? 0.3 : 1;
+    const squint = busy && !attending ? 0.42 : state === "done" ? 0.3 : 1;
     const open = blinking ? 0.08 : squint;
     ctx.fillStyle = INK;
     for (const side of [-1, 1] as const) {
       const ex = faceX + side * (9 - Math.abs(turn) * 2) + turn * 4;
-      const ey = 58 - lean * 5 + (busy ? 4 : 0);
+      const ey = 58 - lean * 5 + (busy && !attending ? 4 : 0);
       ctx.beginPath();
       ctx.ellipse(ex, ey, 3.6, 4.4 * open, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -251,9 +257,14 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
     ctx.restore();
 
     // --- what she is doing -------------------------------------------
-    ctx.fillStyle = ACCENT[state];
+    // Two independent signs, both allowed at once: she can be working and
+    // listening in the same frame, and showing only one of the two is what
+    // made the interface look like it had phases.
     if (busy) {
       // Three ticks rising off the work: the visual of being mid-task.
+      // Amber, never ACCENT[state], or the sign of work would change
+      // colour just because you started speaking.
+      ctx.fillStyle = WORK;
       for (let i = 0; i < 3; i += 1) {
         const phase = (t * 1.5 + i * 0.33) % 1;
         ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.75;
@@ -262,9 +273,10 @@ export function createMascot(canvas: HTMLCanvasElement): Mascot {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-    } else if (state === "listening") {
+    }
+    if (state === "listening") {
       // A ring that breathes with the microphone.
-      ctx.strokeStyle = ACCENT.listening;
+      ctx.strokeStyle = LIVE;
       ctx.globalAlpha = 0.25 + smoothLevel * 0.55;
       ctx.lineWidth = 2;
       ctx.beginPath();
