@@ -24,37 +24,37 @@ class DialogueTests(unittest.IsolatedAsyncioTestCase):
         await self.http.close(); await self.runner.cleanup()
 
     async def test_plain_conversation_has_no_edit_and_receives_real_work_status(self):
-        result = await self.dialogue.reply('Tu fais quoi ?', [{'role': 'agent', 'text': 'Salut'}], {'montage_en_cours': 'flou'})
+        result = await self.dialogue.reply('What are you doing?', [{'role': 'agent', 'text': 'Hi'}], {'edit_in_progress': 'blur'})
         self.assertIsNone(result.command)
-        self.assertIn('flou', self.sent['messages'][0]['content'])
+        self.assertIn('blur', self.sent['messages'][0]['content'])
         self.assertEqual(self.sent['messages'][1]['role'], 'assistant')
 
     async def test_explicit_playback_needs_no_model_but_negations_are_not_shortcuts(self):
-        result = await self.dialogue.reply('Mets la vidéo à une seconde.', [], {})
+        result = await self.dialogue.reply('Go to one second.', [], {})
         self.assertEqual(result.action['time'], 1)
         self.assertIsNone(self.sent)
-        self.assertEqual(quick_playback('Va à 2,5 secondes').action['time'], 2.5)
-        for text in ['Ne mets pas en pause', 'Mets en pause puis coupe', 'Si je dis pause', 'Mets la vidéo à une seconde et ajoute un flou']:
+        self.assertEqual(quick_playback('Jump to 2.5 seconds').action['time'], 2.5)
+        for text in ['Do not pause', 'Pause then cut', 'If I say pause', 'Go to one second and add a blur']:
             self.assertIsNone(quick_playback(text))
 
     async def test_explicit_tool_call_preserves_original_words(self):
         self.message = {'tool_calls': [{'function': {'name': 'enqueue_edit', 'arguments': json.dumps({
-            'instruction': 'Rogne 1 seconde du premier clip.', 'reply': 'Je raccourcis le début.'})}}]}
-        result = await self.dialogue.reply('Rogne une seconde', [], {})
-        self.assertEqual(result.command, 'Rogne une seconde')
+            'instruction': 'Trim 1 second off the first clip.', 'reply': 'Shortening the start.'})}}]}
+        result = await self.dialogue.reply('Trim one second', [], {})
+        self.assertEqual(result.command, 'Trim one second')
 
     async def test_fast_playback_has_no_edit_command(self):
         self.message = {'tool_calls': [{'function': {'name': 'control_video', 'arguments': json.dumps({
-            'action': 'seek', 'time': 2.5, 'reply': 'Je montre ce passage.'})}}]}
-        result = await self.dialogue.reply('Va à deux secondes et demie', [], {})
+            'action': 'seek', 'time': 2.5, 'reply': 'Showing that moment.'})}}]}
+        result = await self.dialogue.reply('Go to two and a half seconds', [], {})
         self.assertIsNone(result.command)
         self.assertEqual(result.action['time'], 2.5)
 
     async def test_invalid_seek_cannot_execute(self):
         self.message = {'tool_calls': [{'function': {'name': 'control_video', 'arguments': json.dumps({
-            'action': 'seek', 'time': -1, 'reply': 'Je déplace la lecture.'})}}]}
+            'action': 'seek', 'time': -1, 'reply': 'Moving playback.'})}}]}
         with self.assertRaises(ValueError):
-            await self.dialogue.reply('Recule', [], {})
+            await self.dialogue.reply('Go back', [], {})
 
     async def test_malformed_tool_never_enters_the_edit_queue(self):
         self.message = {'tool_calls': [{'function': {'name': 'enqueue_edit', 'arguments': '{"reply":null}'}}]}

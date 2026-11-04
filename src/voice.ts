@@ -69,7 +69,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
     if (joining) return;
     if (room) {
       void stop().then(() => {
-        ui.status.textContent = "Conversation terminée.";
+        ui.status.textContent = "Conversation ended.";
       });
       return;
     }
@@ -77,7 +77,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
     ui.button.disabled = true;
     ui.fallback.disabled = true;
     ui.selector.disabled = true;
-    ui.status.textContent = "Connexion à la conversation…";
+    ui.status.textContent = "Connecting to the conversation…";
     void (async () => {
       try {
         // Obtain the exact selected input before allocating a room.
@@ -117,7 +117,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
           if (room === call)
             void fail(
               new Error(
-                "Conversation déconnectée. Cliquez sur Parler pour reprendre.",
+                "Conversation disconnected. Click Talk to resume.",
               ),
             );
         });
@@ -166,19 +166,19 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
             editing = event.pending > 0;
             ui.working(editing);
             ui.status.textContent =
-              "Réponse du monteur · " +
+              "Editor reply · " +
               (event.elapsed_ms / 1000).toFixed(1) +
               " s";
             ui.state("done");
           } else if (event.type === "action_done") {
             ui.state(editing ? "thinking" : "done");
-            ui.status.textContent = "Je vous écoute.";
+            ui.status.textContent = "Listening.";
           } else if (event.type === "provider") {
             ui.status.textContent = event.available
               ? "Voix disponible : " + event.provider
               : "Voix indisponible : " +
                 event.provider +
-                " · passage à la voix de secours";
+                " · switching to the fallback voice";
           } else if (event.type === "error") {
             if (event.fatal) {
               void fail(new Error(event.message));
@@ -195,7 +195,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
         readyTimer = setTimeout(() => {
           void fail(
             new Error(
-              "La voix ne rejoint pas la conversation. Vérifiez le service vocal.",
+              "The voice is not joining the conversation. Check the voice service.",
             ),
           );
         }, 30_000);
@@ -214,7 +214,7 @@ export function setupRealtimeVoice(ui: VoiceUI): void {
         silenceTimer = setTimeout(() => {
           if (meter && meter.peak() < 3)
             ui.status.textContent =
-              "Aucun son reçu du micro. Terminez l’appel et choisissez une autre entrée.";
+              "No sound from the microphone. End the call and pick another input.";
         }, 10_000);
       } catch (error) {
         await fail(error);

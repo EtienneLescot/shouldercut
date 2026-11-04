@@ -46,8 +46,8 @@ def make_tts() -> tuple[tts.TTS, str]:
         engines.append(elevenlabs.TTS(
             api_key=key,
             model=os.getenv("TTS_MODEL") or "eleven_flash_v2_5",
-            voice_id=os.getenv("TTS_VOICE_FR") or os.getenv("TTS_VOICE") or "EXAVITQu4vr4xnSDxMaL",
-            language="fr",
+            voice_id=os.getenv("TTS_VOICE") or "EXAVITQu4vr4xnSDxMaL",
+            language="en",
         ))
         names.append("ElevenLabs")
     google_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -163,7 +163,7 @@ class EditingSupervisor(Supervisor):
                 })
         except Exception as exc:
             await self.emit("error", message=str(exc))
-            self.schedule(self.speak("Je n'ai pas bien reçu ta demande. Tu peux la répéter ?"))
+            self.schedule(self.speak("I did not catch that. Could you say it again?"))
             return
         self.history.extend([{"role": "user", "text": text}, {"role": "agent", "text": decision.text}])
         if decision.action:
@@ -182,7 +182,7 @@ class EditingSupervisor(Supervisor):
                                      headers={'X-ShoulderCut-Trace': trace_id.get() or ''}) as response:
                     data = await response.json()
                     if response.status != 200 or not data.get('ok'):
-                        raise RuntimeError(data.get('message', 'L’action a échoué.'))
+                        raise RuntimeError(data.get('message', 'The action failed.'))
             reply = data['reply']
             self.history.append({'role': 'agent', 'text': reply})
             await self.emit('action_done', elapsed_ms=round((time.monotonic()-started)*1000))
@@ -192,8 +192,8 @@ class EditingSupervisor(Supervisor):
                 self.schedule(self.speak(reply))
         except Exception as exc:
             await self.emit('error', message=str(exc), scope='action')
-            self.history.append({'role': 'agent', 'text': 'Action non confirmée : '+str(exc)})
-            self.schedule(self.speak('Je n’ai pas pu terminer cette action. '+str(exc)))
+            self.history.append({'role': 'agent', 'text': 'Action not confirmed: '+str(exc)})
+            self.schedule(self.speak('I could not finish that action. '+str(exc)))
 
     async def run(self) -> None:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=280)) as http:
@@ -210,7 +210,7 @@ class EditingSupervisor(Supervisor):
                     }, headers={'X-ShoulderCut-Trace': turn_id or ''}) as response:
                         data = await response.json()
                         if response.status != 200 or not data.get("ok"):
-                            raise RuntimeError(data.get("message", "Le montage a échoué."))
+                            raise RuntimeError(data.get("message", "The edit failed."))
                     reply = spoken_text(data.get("reply") or "C'est fait.")
                     self.edit_history.extend([{"role": "user", "text": text}, {"role": "agent", "text": reply}])
                     self.history.append({"role": "agent", "text": reply})
@@ -218,8 +218,8 @@ class EditingSupervisor(Supervisor):
                 except Exception as exc:
                     logger.exception("Supervisor failed")
                     await self.emit("error", message=str(exc), scope="editing", pending=self.queue.qsize())
-                    reply = "Le montage a échoué. Le détail est affiché à l'écran."
-                    self.history.append({"role": "agent", "text": "Le montage n'est pas confirmé : " + str(exc)})
+                    reply = "The edit failed. The details are on screen."
+                    self.history.append({"role": "agent", "text": "The edit is not confirmed: " + str(exc)})
                 finally:
                     self.active_command = None
                     self.queue.task_done()
@@ -271,9 +271,9 @@ async def entrypoint(ctx: JobContext) -> None:
     supervisor = EditingSupervisor(ctx.room, MetaDialogue(dialogue_http))
     agent = ShoulderCutVoice(
         mode="relay",
-        instructions="You are the French-speaking ShoulderCut editing assistant.",
-        stt=meta.STT(language_bias=["French", "English"], keywords=[
-            "ShoulderCut", "X-wing", "WGSL", "rogne", "rognage", "découpe", "recadre", "sous-titres", "annule",
+        instructions="You are the ShoulderCut editing assistant. Speak English.",
+        stt=meta.STT(language_bias=["English"], keywords=[
+            "ShoulderCut", "X-wing", "WGSL", "trim", "crop", "cut", "reframe", "captions", "undo",
         ]),
         vad=vad, tts=engine,
     )
@@ -346,7 +346,7 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(shutdown)
     await session.start(agent=agent, room=ctx.room)
     await supervisor.emit("ready", provider=provider, dialogue_model=supervisor.dialogue.model)
-    await supervisor.speak("Salut ! Qu'est-ce qu'on fait de cette vidéo ?")
+    await supervisor.speak("Hey! What are we making with this video?")
 
 
 if __name__ == "__main__":

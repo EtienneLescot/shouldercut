@@ -1,8 +1,8 @@
 // What Muse is doing, while she does it.
 //
-// A measured run of "floute l'arrière-plan" looks like this:
+// A measured run of "blur the background" looks like this:
 //
-//    3.3s  préparation
+//    3.3s  preparation
 //   20.5s  get_shader_interface      <- seventeen seconds with no event
 //   25.7s  apply_shader_effect
 //   29.8s  seek_video

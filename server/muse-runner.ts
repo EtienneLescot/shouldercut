@@ -15,25 +15,25 @@ export interface MuseRunOptions {
 }
 
 const TOOL_LABELS: Record<string, string> = {
-  get_project: "Lecture du montage",
-  trim_clip: "Découpe du clip",
-  split_clip: "Division du clip",
-  move_clip: "Déplacement du clip",
-  delete_clip: "Retrait du clip",
-  undo: "Annulation",
-  redo: "Rétablissement",
-  describe_frame: "Observation de l’image",
-  track_object: "Suivi de l’objet sur l’extrait",
-  get_shader_interface: "Préparation de l’effet",
-  validate_shader: "Vérification de l’effet",
-  apply_shader_effect: "Application de l’effet",
-  remove_shader_effect: "Retrait de l’effet",
-  export_video: "Export de la vidéo",
-  transcribe_captions: "Transcription des sous-titres",
-  set_captions: "Pose des sous-titres",
-  edit_segment: "Lancement de la transformation",
-  generate_shot: "Lancement de la génération",
-  recommend_video_workflow: "Préparation de la transformation",
+  get_project: "Reading the montage",
+  trim_clip: "Trimming the clip",
+  split_clip: "Splitting the clip",
+  move_clip: "Moving the clip",
+  delete_clip: "Removing the clip",
+  undo: "Undoing",
+  redo: "Redoing",
+  describe_frame: "Looking at the frame",
+  track_object: "Tracking the object",
+  get_shader_interface: "Preparing the effect",
+  validate_shader: "Checking the effect",
+  apply_shader_effect: "Applying the effect",
+  remove_shader_effect: "Removing the effect",
+  export_video: "Exporting the video",
+  transcribe_captions: "Transcribing the captions",
+  set_captions: "Laying down the captions",
+  edit_segment: "Starting the transformation",
+  generate_shot: "Starting the generation",
+  recommend_video_workflow: "Preparing the transformation",
 };
 
 /** Machine events, not stderr banners, describe what the editor is doing. */
@@ -41,7 +41,7 @@ export class MuseEvents {
   private buffer = "";
   reply = "";
   terminal: string | undefined;
-  phase = "Préparation du montage";
+  phase = "Preparing the edit";
   private progress: (progress: MuseProgress) => void;
   constructor(progress: (progress: MuseProgress) => void = () => {}) {
     this.progress = progress;
@@ -152,9 +152,9 @@ export async function runMuse(
       void stopTree(child).finally(() =>
         reject(
           new Error(
-            "Le montage a pris trop de temps. Dernière étape : " +
+            "The edit took too long. Last step: " +
               events.phase.toLowerCase() +
-              ". Vérifiez le résultat avant de réessayer.",
+              ". Check the result before trying again.",
           ),
         ),
       );
@@ -195,9 +195,9 @@ export async function runMuse(
         });
         reject(
           new Error(
-            "Muse n’a pas terminé le montage (" +
+            "Muse did not finish the edit (" +
               events.phase.toLowerCase() +
-              "). Le projet reste accessible ; vérifiez le résultat avant de réessayer.",
+              "). The project is still there; check the result before trying again.",
           ),
         );
       }

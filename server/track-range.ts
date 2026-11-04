@@ -14,19 +14,19 @@ export async function sourceFrameRate(source: string): Promise<number> {
     '-show_entries', 'stream=avg_frame_rate', '-of', 'default=nw=1:nk=1', source], { windowsHide: true, timeout: 10_000 });
   const [n, d = 1] = stdout.trim().split('/').map(Number);
   const fps = n / d;
-  if (!Number.isFinite(fps) || fps <= 0) throw new Error('Impossible de déterminer la cadence du clip pour aligner le suivi.');
+  if (!Number.isFinite(fps) || fps <= 0) throw new Error('Cannot determine the clip frame rate to line the tracking up.');
   return fps;
 }
 
 export function trackingRange(duration: number, start?: unknown, end?: unknown): { start: number; end: number } {
   if (start == null && end == null && duration > MAX_TRACK_SECONDS) {
-    throw new Error('Pour suivre cet objet, indiquez un passage de 12 secondes maximum (début et fin). La vidéo entière est trop longue pour un aperçu interactif.');
+    throw new Error('To track this object, give a range of at most 12 seconds (start and end). The whole video is too long for an interactive preview.');
   }
   const a = Number(start ?? 0), b = Number(end ?? duration);
   if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b <= a || b > duration + .05) {
-    throw new Error('Le passage à suivre doit avoir un début et une fin valides dans le clip.');
+    throw new Error('The range to track needs a valid start and end inside the clip.');
   }
-  if (b - a > MAX_TRACK_SECONDS + .001) throw new Error('Choisissez un passage de 12 secondes maximum pour le suivi d’objet.');
+  if (b - a > MAX_TRACK_SECONDS + .001) throw new Error('Pick a range of at most 12 seconds for object tracking.');
   return { start: a, end: Math.min(b, duration) };
 }
 

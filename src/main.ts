@@ -127,7 +127,7 @@ function updateWorking(): void {
     actionWorking;
   // One owner for the trail's lifetime, so no path can leave it counting.
   if (working !== trailOpen) {
-    if (working) trail.begin("Muse prend la demande");
+    if (working) trail.begin("Muse takes the request");
     else trail.end();
     trailOpen = working;
   }
@@ -322,7 +322,7 @@ async function loadProjectClip(
     "/api/clips/" + encodeURIComponent(clip.id) + "/mask",
   );
   if (!masks.ok)
-    throw new Error("Impossible de restaurer le détourage de ce clip.");
+    throw new Error("Could not restore the cutout for this clip.");
   const stored = (await masks.json()) as { track?: SamTrackPayload | null };
   if (activeClipId !== clip.id) return;
   send({ type: "clearMaskTrack" });
@@ -349,7 +349,7 @@ function waitForPlayer(accept: (state: PlayerState) => boolean): Promise<void> {
     };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error("La vidéo ne répond pas. Rechargez le clip."));
+      reject(new Error("The video is not responding. Reload the clip."));
     }, 15_000);
     worker.addEventListener("message", onState);
   });
@@ -478,7 +478,7 @@ function showSelection(track: SamTrackPayload): void {
     })),
     drawn: -1,
   };
-  selectionLabel.textContent = "Aperçu du détourage";
+  selectionLabel.textContent = "Cutout preview";
   if (currentState) drawSelection(currentState);
 }
 function drawSelection(state: PlayerState): void {
@@ -580,13 +580,13 @@ function addChatMessage(role: "user" | "agent", text: string): void {
   chatLog!.scrollTop = chatLog!.scrollHeight;
   if (role === "agent") {
     // Muse's answer belongs over the video, not buried in a transcript.
-    // Muse opens with a bold "Fait" / "Terminé" header: useful in a
+    // Muse opens with a bold "Done" header: useful in a
     // transcript, noise on one line over the frame.
     const line = text
       .replace(/\*\*/g, "")
       .replace(/\s+/g, " ")
       .trim()
-      .replace(/^(fait|terminé|done|ok)\s*[.:–-]?\s*/i, "");
+      .replace(/^(done|ok|all set)\s*[.:–-]?\s*/i, "");
     replyLine!.textContent = line;
     replyLine!.classList.toggle("show", line.length > 0);
   }
@@ -610,7 +610,7 @@ function connectBridge(): void {
   const events = new EventSource("/api/events");
   events.addEventListener("hello", (event) => {
     if (currentState) publishBrowserState(currentState);
-    agentStatus!.textContent = "À votre écoute";
+    agentStatus!.textContent = "Listening";
     try {
       const payload = JSON.parse((event as MessageEvent<string>).data) as {
         effects?: ShaderEffectDefinition[];
@@ -635,19 +635,19 @@ function connectBridge(): void {
     supervisorWorking = Boolean(progress.working);
     updateWorking();
     agentStatus!.textContent = supervisorWorking
-      ? (progress.phase || "Muse travaille sur la vidéo") + "…"
-      : "À votre écoute";
+      ? (progress.phase || "Muse is working on the video") + "…"
+      : "Listening";
     // Every tool the agent calls reaches us here. Lay them out as they
     // arrive instead of overwriting one line, so the wait has a shape.
     // updateWorking opens and closes the trail; this only adds to it.
     if (supervisorWorking)
-      trail.step(progress.phase || "Muse travaille sur la vidéo");
+      trail.step(progress.phase || "Muse is working on the video");
   });
   events.addEventListener("assistant-action", (event) => {
     const p = JSON.parse((event as MessageEvent<string>).data);
     actionWorking = Boolean(p.working);
     updateWorking();
-    agentStatus!.textContent = p.working ? p.phase + "…" : "À votre écoute";
+    agentStatus!.textContent = p.working ? p.phase + "…" : "Listening";
   });
   events.addEventListener("assistant-ack", (event) => {
     replyLine!.textContent = JSON.parse(
@@ -674,7 +674,7 @@ function connectBridge(): void {
       dryRun?: boolean;
     };
     pendingEffects.set(payload.requestId, payload.effect);
-    agentStatus!.textContent = "Préparation de l’effet…";
+    agentStatus!.textContent = "Preparing the effect…";
     // The shader Muse just wrote, shown for a beat as it lands.
     if (!payload.dryRun && payload.effect.code) trail.code(payload.effect.code);
     send({
@@ -771,7 +771,7 @@ function connectBridge(): void {
       return;
     }
     renderingClipId = clip.id;
-    exportStatus!.textContent = "Préparation de l’export…";
+    exportStatus!.textContent = "Preparing the export…";
     send({
       type: "exportRange",
       requestId: payload.requestId,
@@ -792,8 +792,8 @@ function connectBridge(): void {
         message = "";
       try {
         if (payload.clipId && payload.clipId !== activeClipId)
-          throw new Error("Le clip ouvert a changé.");
-        if (!currentState?.fileName) throw new Error("Aucune vidéo ouverte.");
+          throw new Error("The open clip has changed.");
+        if (!currentState?.fileName) throw new Error("No video is open.");
         if (payload.action === "play" || payload.action === "pause") {
           const action = payload.action;
           const already =
@@ -836,7 +836,7 @@ function connectBridge(): void {
     })();
   });
   events.addEventListener("error", () => {
-    agentStatus!.textContent = "Reconnexion…";
+    agentStatus!.textContent = "Reconnecting…";
   });
 }
 function renderState(state: PlayerState): void {
@@ -860,7 +860,7 @@ function renderState(state: PlayerState): void {
   );
   clipTitle.textContent = state.fileName?.startsWith("generated:")
     ? "Nouvelle version"
-    : state.fileName || "Votre vidéo";
+    : state.fileName || "Your video";
   currentTime.textContent = formatTime(state.mediaTime);
   durationTime.textContent = formatTime(state.duration);
   const clip = activeClip();
@@ -887,15 +887,15 @@ worker.addEventListener("message", (event: MessageEvent<WorkerEvent>) => {
     const effect = pendingEffects.get(data.result.requestId);
     pendingEffects.delete(data.result.requestId);
     if (data.result.ok && data.result.dryRun) {
-      agentStatus!.textContent = "Effet vérifié";
+      agentStatus!.textContent = "Effect verified";
     } else if (data.result.ok && effect) {
       clearSelection();
       exportStatus!.textContent = "";
       activeEffects.set(effect.id, effect);
       renderEffects();
-      agentStatus!.textContent = "Effet appliqué";
+      agentStatus!.textContent = "Effect applied";
     } else if (!data.result.ok) {
-      agentStatus!.textContent = "Muse ajuste l’effet…";
+      agentStatus!.textContent = "Muse is adjusting the effect…";
       console.warn("Shader rejected", data.result.errors);
     }
     void fetch("/api/effects/result", {
@@ -968,14 +968,14 @@ async function refreshGenerations(): Promise<void> {
     );
     updateWorking();
     if (generationWorking && !supervisorWorking && !voiceWorking)
-      agentStatus!.textContent = "Transformation vidéo en cours…";
+      agentStatus!.textContent = "Transforming the video…";
     else if (
       wasWorking &&
       !generationWorking &&
       !supervisorWorking &&
       !voiceWorking
     )
-      agentStatus!.textContent = "À votre écoute";
+      agentStatus!.textContent = "Listening";
     for (const job of jobs) {
       const previous = watchedGenerations.get(job.id);
       watchedGenerations.set(job.id, job.state);
@@ -1005,13 +1005,13 @@ async function refreshGenerations(): Promise<void> {
                 time: Math.min(clip.out - 0.05, clip.in + 0.5),
               });
           }
-          addChatMessage("agent", "Voici la nouvelle version.");
+          addChatMessage("agent", "Here is the new version.");
         } else watchedGenerations.delete(job.id); // retry a temporary import failure
       } else if (job.state === "failed") {
-        errorText!.textContent = job.error || "La transformation a échoué.";
+        errorText!.textContent = job.error || "The transformation failed.";
         addChatMessage(
           "agent",
-          "La transformation a échoué. Vous pouvez me demander de réessayer.",
+          "The transformation failed. Ask me to try again.",
         );
       }
     }
@@ -1093,7 +1093,7 @@ redoBtn.addEventListener("click", () => {
 });
 exportBtn.addEventListener("click", () => {
   exportBtn.disabled = true;
-  exportStatus.textContent = "Export en cours…";
+  exportStatus.textContent = "Exporting…";
   void fetch("/api/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1110,7 +1110,7 @@ exportBtn.addEventListener("click", () => {
         throw new Error(payload.message || "Export failed");
       const link = document.createElement("a");
       link.href = payload.url;
-      link.textContent = "Télécharger le MP4";
+      link.textContent = "Download the MP4";
       exportStatus.replaceChildren(link);
       if (payload.srtFile) {
         const srtLink = document.createElement("a");
@@ -1288,9 +1288,9 @@ pttBtn.addEventListener("click", () => {
         // a switched-off wireless headset still opens and streams zeros.
         if (meter.peak() < SILENCE_PEAK) {
           voiceStatus.textContent =
-            "Rien entendu sur « " +
+            "Nothing heard on " +
             device +
-            " ». Vérifiez ce micro, ou changez l’entrée par défaut de Windows.";
+            ". Check that microphone, or change the Windows default input.";
           setUiState("error");
           unlock();
           return;
@@ -1299,7 +1299,7 @@ pttBtn.addEventListener("click", () => {
         const blob = new Blob(voiceChunks, {
           type: mediaRecorder?.mimeType || "audio/webm",
         });
-        voiceStatus.textContent = "Transcription…";
+        voiceStatus.textContent = "Transcribing…";
         void blob
           .arrayBuffer()
           .then((buffer) => {
@@ -1355,9 +1355,9 @@ pttBtn.addEventListener("click", () => {
       });
       mediaRecorder.start();
       pttBtn.disabled = false;
-      if (talkLabel) talkLabel.textContent = "Terminer l’enregistrement";
+      if (talkLabel) talkLabel.textContent = "Stop recording";
       voiceStatus.textContent =
-        "J’écoute sur « " + device + " »… cliquez pour arrêter.";
+        "Listening on " + device + "… click to stop.";
     })
     .catch((error: unknown) => {
       voiceStatus.textContent =
@@ -1404,7 +1404,7 @@ chatForm.addEventListener("submit", (event) => {
   chatWorking = true;
   updateWorking();
   errorText.textContent = "";
-  agentStatus.textContent = "Je vous écoute…";
+  agentStatus.textContent = "Listening…";
   void fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1428,8 +1428,8 @@ chatForm.addEventListener("submit", (event) => {
       }
       addChatMessage("agent", payload.reply || "Done.");
       agentStatus.textContent = payload.editing
-        ? "Montage en cours…"
-        : "À votre écoute";
+        ? "Editing…"
+        : "Listening";
       setUiState("done");
     })
     .catch((error: unknown) => {

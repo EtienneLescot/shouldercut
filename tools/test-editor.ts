@@ -11,12 +11,12 @@ test('Muse event frames may be split across arbitrary stdout chunks', () => {
   const output = [
     { payload: { kind: 'task_lifecycle', event: { kind: 'proposed', task_kind: 'tool.mcp__shouldercut_fx__trim_clip' } } },
     { payload: { kind: 'run_output_delta', text: 'Unconfirmed intermediate answer' } },
-    { payload: { kind: 'run_terminal', terminal: 'completed', text: 'Première seconde retirée.' } },
+    { payload: { kind: 'run_terminal', terminal: 'completed', text: 'First second removed.' } },
   ].map((row) => JSON.stringify(row)).join('\n');
   for (let i = 0; i < output.length; i += 7) events.push(output.slice(i, i + 7));
   events.finish();
-  assert.deepEqual(progress, ['Découpe du clip']);
-  assert.equal(events.reply, 'Première seconde retirée.');
+  assert.deepEqual(progress, ['Trimming the clip']);
+  assert.equal(events.reply, 'First second removed.');
   assert.equal(events.terminal, 'completed');
 });
 
@@ -36,10 +36,10 @@ test('editor has an explicit model and no personal skills or reminder agents', (
 });
 
 test('a long video cannot silently become a full synchronous SAM request', () => {
-  assert.throws(() => trackingRange(266.4), /passage de 12 secondes/);
-  assert.throws(() => trackingRange(266.4, 0, 266.4), /12 secondes/);
-  assert.throws(() => trackingRange(6, 5, 9), /valides/);
-  assert.throws(() => trackingRange(6, NaN, 4), /valides/);
+  assert.throws(() => trackingRange(266.4), /at most 12 seconds/);
+  assert.throws(() => trackingRange(266.4, 0, 266.4), /12 seconds/);
+  assert.throws(() => trackingRange(6, 5, 9), /valid start and end/);
+  assert.throws(() => trackingRange(6, NaN, 4), /valid start and end/);
   assert.deepEqual(trackingRange(266.4, 100, 105), { start: 100, end: 105 });
   assert.deepEqual(trackingRange(6), { start: 0, end: 6 });
 });

@@ -7,13 +7,13 @@
    "id": "text_to_video_insert",
    "name": "Generated insert / from-scratch shot",
    "userCues": [
-    "ajoute un plan",
-    "genere un plan",
+    "add a shot",
+    "generate a shot",
     "insert",
     "b-roll",
     "from scratch",
-    "cree une video de",
-    "plan de"
+    "make a video of",
+    "shot of"
    ],
    "task": "Create a new shot that does not exist in the source footage, to cut into the edit or stand alone.",
    "inputs": [
@@ -55,13 +55,13 @@
    "name": "Whole-frame instruction edit",
    "userCues": [
     "change",
-    "transforme",
-    "remplace",
-    "mets",
+    "transform",
+    "replace",
+    "make it",
     "relight",
-    "relooke",
-    "en hiver",
-    "de nuit"
+    "restyle",
+    "in winter",
+    "at night"
    ],
    "task": "Transform existing footage from a sentence, letting the model re-render the whole frame coherently (light, shadows, occlusions).",
    "inputs": [
@@ -122,14 +122,14 @@
    "id": "masked_inpaint_edit",
    "name": "Masked inpainting edit (native mask video)",
    "userCues": [
-    "supprime",
-    "efface",
-    "retire",
-    "enleve",
-    "remplace uniquement",
-    "que lui",
-    "que elle",
-    "sans toucher au reste"
+    "remove",
+    "erase",
+    "delete",
+    "take out",
+    "replace only",
+    "just him",
+    "just her",
+    "without touching the rest"
    ],
    "task": "Generate only inside a SAM mask video; everything outside is preserved by the model and again by our recomposite.",
    "inputs": [
@@ -179,15 +179,14 @@
    "id": "character_replace_motion",
    "name": "Character replacement driven by the source motion",
    "userCues": [
-    "en robot",
-    "en chevalier",
-    "en monstre",
-    "devient un",
-    "deviennent des",
-    "transforme le en",
-    "transforme les en",
-    "remplace le personnage",
-    "remplace la par"
+    "into a robot",
+    "into a knight",
+    "into a monster",
+    "becomes a",
+    "turn him into",
+    "turn them into",
+    "replace the character",
+    "replace her with"
    ],
    "task": "A new character re-performs the source footage: appearance comes from a character image, motion and scene integration from the source video.",
    "inputs": [
@@ -251,10 +250,10 @@
    "id": "keyframe_guided_replacement",
    "name": "Keyframe-guided replacement (mask as production intermediate)",
    "userCues": [
-    "exactement comme cette image",
-    "comme sur la photo",
-    "fidèle au design",
-    "le meme personnage que"
+    "exactly like this image",
+    "like in the photo",
+    "true to the design",
+    "the same character as"
    ],
    "task": "Edit the replacement into ONE frame with an image model under full control, then propagate that appearance through the shot with a video backend.",
    "inputs": [
@@ -294,11 +293,11 @@
    "id": "motion_transfer",
    "name": "Motion transfer onto a character",
    "userCues": [
-    "fais danser",
-    "fais lui faire",
-    "meme danse",
-    "meme mouvement",
-    "anime ce personnage avec"
+    "make it dance",
+    "make him do",
+    "same dance",
+    "same movement",
+    "animate this character with"
    ],
    "task": "A character image performs the movements of a separate reference video.",
    "inputs": [
@@ -341,11 +340,11 @@
    "id": "first_last_frame",
    "name": "First/last-frame transition",
    "userCues": [
-    "transition vers",
-    "commence par",
-    "finit sur",
-    "de cette image a",
-    "morphing entre"
+    "transition to",
+    "start with",
+    "end on",
+    "from this image to",
+    "morphing between"
    ],
    "task": "Generate the in-between between an imposed start image and an imposed end image.",
    "inputs": [
@@ -389,11 +388,11 @@
    "id": "reference_identity_generation",
    "name": "Reference-bound generation (identity/elements)",
    "userCues": [
-    "le meme personnage",
-    "garde son visage",
-    "ce produit",
-    "avec ce logo",
-    "le meme chien"
+    "the same character",
+    "keep his face",
+    "this product",
+    "with this logo",
+    "the same dog"
    ],
    "task": "Generate new footage where a person/product must persist across shots, bound by reference media.",
    "inputs": [
@@ -435,11 +434,11 @@
    "id": "outpaint_reframe",
    "name": "Outpainting / reframing",
    "userCues": [
-    "en vertical",
+    "in vertical",
     "9:16",
-    "elargis le cadre",
-    "recadre",
-    "plus large"
+    "widen the frame",
+    "reframe",
+    "wider"
    ],
    "task": "Extend the frame beyond its borders (format change, camera widening) with generated surroundings.",
    "inputs": [
@@ -473,14 +472,14 @@
    "id": "deterministic_shader_effect",
    "name": "Deterministic shader effect (no generation)",
    "userCues": [
-    "etalonne",
-    "floute le fond",
-    "ajoute des etincelles",
+    "grade",
+    "blur the background",
+    "add sparks",
     "zoom",
-    "ralenti visuel",
-    "effet",
-    "filtre",
-    "titre"
+    "slow motion look",
+    "effect",
+    "filter",
+    "title"
    ],
    "task": "Anything expressible as pixels math over the real footage: grade, blur, particles, 3D overlay, titles, camera moves. Instant, free, frame-exact.",
    "inputs": [

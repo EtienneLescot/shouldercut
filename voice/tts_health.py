@@ -53,5 +53,5 @@ class QuotaAwareGeminiTTS(google.beta.GeminiTTS):
 
 def public_voice_error(error) -> str:
     if getattr(getattr(error, 'error', error), 'status_code', None) == 429:
-        return 'La voix a atteint son quota. La réponse reste affichée et les commandes vidéo fonctionnent.'
-    return 'La voix est momentanément indisponible. La réponse reste affichée ; vous pouvez continuer à écrire.'
+        return 'Voice has hit its quota. The reply still shows and the video commands still work.'
+    return 'Voice is unavailable for a moment. The reply still shows; you can keep typing.'

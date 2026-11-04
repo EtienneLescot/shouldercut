@@ -1,7 +1,7 @@
 """Real Cloud round trip with a synthetic microphone, not the user's live mic.
 
 Requires the running demo and an open editor. The command really executes.
-Run: uv run python smoke.py "Rogne la première seconde du premier clip."
+Run: uv run python smoke.py "Trim the first second off the first clip."
 """
 import asyncio
 import json
@@ -18,7 +18,7 @@ from diagnostics import record
 
 
 async def main():
-    command = sys.argv[1] if len(sys.argv) > 1 else "Mets la vidéo en pause."
+    command = sys.argv[1] if len(sys.argv) > 1 else "Pause the video."
     expect_action = '--action' in sys.argv
     expect_edit = '--conversation' not in sys.argv and not expect_action
     async with http_context.open(), aiohttp.ClientSession() as http:

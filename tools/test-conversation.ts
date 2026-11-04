@@ -3,14 +3,14 @@ import { test } from "node:test";
 import { validateAction, quickPlayback } from "../server/conversation.ts";
 
 test("only unambiguous complete playback commands skip the model", () => {
-  assert.equal(quickPlayback("Mets la vidéo à une seconde.")?.action?.time, 1);
-  assert.equal(quickPlayback("Va à 2,5 secondes")?.action?.time, 2.5);
-  assert.equal(quickPlayback("Mets en pause")?.action?.action, "pause");
+  assert.equal(quickPlayback("Go to one second.")?.action?.time, 1);
+  assert.equal(quickPlayback("Jump to 2.5 seconds")?.action?.time, 2.5);
+  assert.equal(quickPlayback("Pause")?.action?.action, "pause");
   for (const text of [
-    "Ne mets pas en pause",
-    "Mets en pause puis coupe",
-    "Si je dis pause",
-    "Mets la vidéo à une seconde et ajoute un flou",
+    "Do not pause",
+    "Pause then cut",
+    "If I say pause",
+    "Go to one second and add a blur",
   ]) {
     assert.equal(quickPlayback(text), null);
   }

@@ -14,7 +14,7 @@ class FakeDialogue:
     async def reply(self, text, history, status):
         if text == 'Mets en pause':
             return Reply('Je mets en pause.', action={'name': 'control_video', 'action': 'pause', 'time': None})
-        if text == 'Où en es-tu ?':
+        if text == 'Where are you at?':
             return Reply('Je travaille encore sur le flou.')
         return Reply('Je vais le faire.', text)
 
@@ -53,7 +53,7 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         async def action(request):
             self.actions.append(await request.json())
             self.action_reached.set()
-            return web.json_response({'ok': True, 'reply': 'Vidéo en pause.'})
+            return web.json_response({'ok': True, 'reply': 'Video paused.'})
 
         app = web.Application()
         app.router.add_post('/api/assistant/action', action)
@@ -133,7 +133,7 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_changed_final_discards_speculative_edit(self):
         self.supervisor.preview('Rogne une seconde')
         await self.supervisor.preview_task
-        await self.turn('Où en es-tu ?')
+        await self.turn('Where are you at?')
         await self.supervisor.dialogue_task
         self.assertEqual(self.requests, [])
         self.assertTrue(self.supervisor.queue.empty())
@@ -153,7 +153,7 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_conversation_during_edit_does_not_enqueue_another_edit(self):
         await self.turn('Ajoute un flou')
         await asyncio.wait_for(self.reached.wait(), 2)
-        await self.turn('Où en es-tu ?')
+        await self.turn('Where are you at?')
         await self.supervisor.dialogue_task
         await asyncio.sleep(0)
         self.assertEqual(len(self.requests), 1)
@@ -174,19 +174,19 @@ class VoiceTests(unittest.IsolatedAsyncioTestCase):
         begun = asyncio.Event()
         original = self.supervisor.dialogue.reply
         async def delayed(text, history, status):
-            if text == 'Première idée':
+            if text == 'First idea':
                 begun.set()
                 await asyncio.Event().wait()
             return await original(text, history, status)
         self.supervisor.dialogue.reply = delayed
-        await self.turn('Première idée')
+        await self.turn('First idea')
         await asyncio.wait_for(begun.wait(), 1)
         previous = self.supervisor.dialogue_task
-        await self.turn('Nouvelle idée')
+        await self.turn('New idea')
         await self.supervisor.dialogue_task
         await asyncio.wait_for(self.reached.wait(), 1)
         self.assertTrue(previous.cancelled())
-        self.assertEqual([request['message'] for request in self.requests], ['Nouvelle idée'])
+        self.assertEqual([request['message'] for request in self.requests], ['New idea'])
 
     async def test_tts_provider_order_and_gemini_without_elevenlabs(self):
         with patch.dict(agent.os.environ, {'ELEVEN_API_KEY': 'test', 'GOOGLE_API_KEY': 'test'}, clear=True):

@@ -97,13 +97,13 @@ export function validateEditInputs(
   ) {
     throw new GenerationInputError(
       "missing_reference",
-      "Ce modèle nécessite une image de référence. Sans image, utilisez kling-o3 (description seule) ou vace (avec détourage). Ne relancez pas ce modèle avec les mêmes paramètres.",
+      "This model needs a reference image. Without one, use kling-o3 (description only) or vace (with a cutout). Do not run this model again with the same parameters.",
     );
   }
   if (["vace", "vace-local"].includes(backend) && hasMask === false) {
     throw new GenerationInputError(
       "missing_mask",
-      "Détourez d’abord le sujet sur le même passage, puis lancez la transformation.",
+      "Cut out the subject on the same range first, then start the transformation.",
     );
   }
 }
@@ -844,7 +844,7 @@ export class GenJobManager {
         duration > 81 / 16 + 0.001
       ) {
         throw new Error(
-          "La transformation nécessite un passage de 5 secondes maximum.",
+          "The transformation needs a range of at most 5 seconds.",
         );
       }
       const sourceName = job.id + "-source.mp4";
@@ -1218,7 +1218,7 @@ export class GenJobManager {
         } else {
           if (!maskName)
             throw new Error(
-              "Le remplacement VACE nécessite un masque SAM. Suivez d’abord le sujet sur ce passage.",
+              "VACE replacement needs a SAM mask. Track the subject on this range first.",
             );
           const control = job.id + "-vace-control.mp4";
           await prepareInpaintingControl(

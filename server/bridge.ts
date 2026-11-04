@@ -534,7 +534,7 @@ async function runEditorNow(
   const workspace = join(repoRoot, "server", "agent-workspace");
   const mcpScript = join(repoRoot, "server", "shouldercut-mcp.mjs");
   try {
-    broadcast("supervisor", { working: true, phase: "Préparation du montage" });
+    broadcast("supervisor", { working: true, phase: "Preparing the edit" });
     return await measure("editor.run", () =>
       runMuse({
         executable: findMuseExecutable(),
@@ -603,7 +603,7 @@ function currentClip() {
     clips.find((c) => c.id === state?.activeClipId) ||
     clips.find((c) => c.name === state?.fileName);
   if (!clients.size || !clip)
-    throw new Error("Importez une vidéo pour commencer.");
+    throw new Error("Import a video to get started.");
   return clip;
 }
 function playback(
@@ -615,12 +615,12 @@ function playback(
     action === "seek" &&
     (time === undefined || time < clip.in || time >= clip.out)
   )
-    throw new Error("Cette position est hors du passage monté.");
+    throw new Error("That position is outside the edited range.");
   const requestId = randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pendingPlayback.delete(requestId);
-      reject(new Error("Le lecteur n’a pas confirmé le déplacement."));
+      reject(new Error("The player did not confirm the move."));
     }, 5000);
     pendingPlayback.set(requestId, { resolve, reject, timer });
     broadcast("playback", { action, time, requestId, clipId: clip.id });
@@ -636,7 +636,7 @@ async function executeActionInner(
     previewVersion++;
     selection = null;
     broadcast("selection-clear", {});
-    return { reply: "L’aperçu du détourage est masqué." };
+    return { reply: "Cutout preview hidden." };
   }
   const clip = currentClip();
   if (action.name === "control_video") {
@@ -648,10 +648,10 @@ async function executeActionInner(
     return {
       reply:
         action.action === "play"
-          ? "Lecture lancée."
+          ? "Playing."
           : action.action === "pause"
-            ? "La vidéo est en pause."
-            : "Voici le passage à " + action.time!.toFixed(1) + " secondes.",
+            ? "The video is paused."
+            : "Here it is at " + action.time!.toFixed(1) + " seconds.",
     };
   }
   const version = ++previewVersion;
@@ -660,8 +660,8 @@ async function executeActionInner(
     working: true,
     phase:
       action.name === "preview_subject"
-        ? "Détourage du sujet"
-        : "Recherche du passage",
+        ? "Cutting out the subject"
+        : "Searching for the moment",
   });
   try {
     if (action.name === "find_moment") {
@@ -673,12 +673,12 @@ async function executeActionInner(
       );
       if (version !== previewVersion || currentClip().id !== clip.id)
         throw new Error(
-          "La recherche a été interrompue par votre nouvelle action.",
+          "The search was interrupted by your new instruction.",
         );
       if (result.time === null)
         return {
           reply:
-            "Je ne repère pas clairement ce moment dans les images de ce clip. Précisez un indice visuel.",
+            "I cannot clearly find that moment in this clip. Give me a visual cue.",
         };
       broadcast("selection-clear", {});
       await playback("seek", result.time);
@@ -709,7 +709,7 @@ async function executeActionInner(
       if (!result.frames.some((f) => f.ones > 0))
         return {
           reply:
-            "Je ne repère pas ce sujet à cet instant. Indiquez-le plus précisément ou changez de passage.",
+            "I cannot find that subject at this point. Describe it more precisely, or move elsewhere.",
         };
       track = {
         ...alignTracking(result, { start, end }, fps),
@@ -721,7 +721,7 @@ async function executeActionInner(
         previewCache.delete(previewCache.keys().next().value!);
     }
     if (version !== previewVersion || currentClip().id !== clip.id)
-      throw new Error("L’aperçu a été interrompu par votre nouvelle action.");
+      throw new Error("The preview was interrupted by your new instruction.");
     // Return to the exact masked frame if playback moved while SAM worked.
     await playback("seek", start);
     selection = { subject: action.subject!, clipId: clip.id, start, end };
@@ -743,7 +743,7 @@ async function executeActionInner(
       end,
       frames: previewFrames,
     });
-    return { reply: "Voici le détourage. Qu’est-ce qu’on fait de ce sujet ?" };
+    return { reply: "Here is the cutout. What do we do with this subject?" };
   } finally {
     fastWorking--;
     broadcast("assistant-action", { working: fastWorking > 0 });
@@ -815,7 +815,7 @@ async function handleApi(
       if (body.ok === true) item.resolve();
       else
         item.reject(
-          new Error(String(body.message || "Le lecteur ne répond pas.")),
+          new Error(String(body.message || "The player is not responding.")),
         );
     }
     sendJson(res, 200, { ok: true });
@@ -1086,7 +1086,7 @@ async function handleApi(
         : project.clips.find((c) => c.name === bs?.fileName) ||
           (project.clips.length === 1 ? project.clips[0] : null);
     if (!clip)
-      throw new Error("Chargez un clip et précisez lequel doit être suivi.");
+      throw new Error("Load a clip and say which one should be tracked.");
     const range = trackingRange(clip.duration, body.start, body.end);
     const cached = matchingTrack(clip.hash, range.start, range.end, prompt);
     record("sam.track.cache", { cached: !!cached });
@@ -1155,7 +1155,7 @@ async function handleApi(
       (browserState as { duration?: number } | null)?.duration || 0;
     if (!sourceDuration)
       throw new Error(
-        "Chargez le clip dans le lecteur avant de lancer une transformation.",
+        "Load the clip in the player before starting a transformation.",
       );
     if (
       start < 0 ||
@@ -1163,7 +1163,7 @@ async function handleApi(
       end - start > 81 / 16 + 0.001
     ) {
       throw new Error(
-        "Choisissez un passage valide de 5 secondes maximum dans le clip chargé.",
+        "Pick a valid range of at most 5 seconds inside the loaded clip.",
       );
     }
     const backend =
@@ -1199,7 +1199,7 @@ async function handleApi(
       if (!online)
         throw new GenerationInputError(
           "backend_offline",
-          "Le moteur local est arrêté. Choisissez un modèle hébergé disponible.",
+          "The local engine is stopped. Pick a hosted model that is available.",
         );
     }
     const previous = new Set(genManager.list().map((j) => j.id));
@@ -1261,12 +1261,12 @@ async function handleApi(
     clearTimeout(pending.timer);
     const bytes = await readRawBody(req, 256_000_000).catch((error) => {
       pending.job.state = "failed";
-      pending.job.error = "Le transfert du clip a échoué : " + String(error);
+      pending.job.error = "Transferring the clip failed: " + String(error);
       throw error;
     });
     if (!bytes.length) {
       pending.job.state = "failed";
-      pending.job.error = "Le clip reçu est vide.";
+      pending.job.error = "The clip that came back is empty.";
       throw new Error(pending.job.error);
     }
     const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
@@ -1336,7 +1336,7 @@ async function handleApi(
           .catch((error) => {
             genImports.delete(job.id);
             throw new Error(
-              "La vidéo est générée mais son import a échoué : " +
+              "The video was generated but importing it failed: " +
                 String(error),
             );
           });
@@ -1477,8 +1477,8 @@ async function handleApi(
       sendJson(res, 503, {
         ok: false,
         message: configured
-          ? "Le service vocal démarre ou est arrêté. Relancez npm run demo."
-          : "La voix nécessite une clé ElevenLabs ou Gemini. Configurez le fichier .env.",
+          ? "The voice service is starting or stopped. Run npm run demo again."
+          : "Voice needs an ElevenLabs or Gemini key. Set it in the .env file.",
       });
       return;
     }
@@ -1488,7 +1488,7 @@ async function handleApi(
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     if (!livekitUrl || !apiKey || !apiSecret)
-      throw new Error("Configurez le projet LiveKit Cloud dans .env.");
+      throw new Error("Set up the LiveKit Cloud project in .env.");
     // The shared Cloud project can disable automatic room creation. Create
     // only our ephemeral room and explicitly dispatch the named editor agent.
     const rooms = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
@@ -1535,7 +1535,7 @@ async function handleApi(
     const message = String(body.message || "").trim();
     if (!message) throw new Error("message is required");
     if (!clients.size || !browserState)
-      throw new Error("Chargez une vidéo avant de demander un montage.");
+      throw new Error("Load a video before asking for an edit.");
     const history = Array.isArray(body.history)
       ? body.history.filter(isRecord).map((m) => ({
           role: String(m.role || "user"),

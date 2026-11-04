@@ -67,7 +67,7 @@ class MetaDialogue:
         async with self.http.post(self.url, headers={"Authorization": "Bearer " + (key or "")},
                                   json=body, timeout=aiohttp.ClientTimeout(total=12)) as response:
             if response.status != 200:
-                raise RuntimeError(f"Le dialogue Meta ne répond pas (HTTP {response.status}).")
+                raise RuntimeError(f"The Meta dialogue is not answering (HTTP {response.status}).")
             data = await response.json()
         record('dialogue.model', model=self.model,
                elapsed_ms=round((time.monotonic() - started) * 1000), status='ok')
@@ -89,7 +89,7 @@ class MetaDialogue:
             except (aiohttp.ClientError, TimeoutError):
                 pass
         record('dialogue.context', elapsed_ms=round((time.monotonic() - context_started) * 1000))
-        messages = [{"role": "developer", "content": INSTRUCTIONS + "\nStatut réel: " + json.dumps(status, ensure_ascii=False)}]
+        messages = [{"role": "developer", "content": INSTRUCTIONS + "\nActual status: " + json.dumps(status, ensure_ascii=False)}]
         messages += [{"role": "user" if m['role'] == 'user' else "assistant", "content": m['text']}
                      for m in history[-16:]]
         messages.append({"role": "user", "content": text})
@@ -133,11 +133,11 @@ class MetaDialogue:
         try:
             verdict = await self._complete([
                 {"role": "developer", "content":
-                 "Réponds par un seul mot : oui ou non. La demande porte-t-elle "
-                 "sur une modification de la vidéo (couper, réordonner, effet, "
-                 "sous-titres, détourage suivi, remplacement, export, annuler) ? "
-                 "Une salutation, un remerciement, une question sur tes capacités "
-                 "ou sur l’état du montage : non. Une demande d’aperçu seul : non."},
+                 "Answer with a single word: yes or no. Is the request about "
+                 "changing the video (cut, reorder, effect, captions, tracked "
+                 "cutout, replacement, export, undo)? A greeting, a thank you, a "
+                 "question about your abilities or about the state of the "
+                 "montage: no. A request for a preview alone: no."},
                 {"role": "user", "content": text},
             ], key, started)
         except Exception:

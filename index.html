@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ShoulderCut — Montez à voix haute</title>
+    <title>ShoulderCut — Edit out loud</title>
   </head>
   <body data-ui="idle">
     <main id="app">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="ShoulderCut, accueil"
+        <a class="brand" href="/" aria-label="ShoulderCut, home"
           ><svg viewBox="0 0 28 28" aria-hidden="true">
             <path d="M6 7h7l-4 14H2L6 7Zm13 0h7l-4 14h-7l4-14Z" /></svg
-          >ShoulderCut<span>avec Muse</span></a
+          >ShoulderCut<span>with Muse</span></a
         >
         <div class="topbar-actions">
           <label class="file-button"
@@ -21,38 +21,38 @@
               type="file"
               accept="video/*,.mkv,.mov,.mp4,.webm"
               hidden
-            />＋ Importer</label
+            />+ Import</label
           ><button id="exportBtn" class="primary" type="button" disabled>
-            Exporter ↗
+            Export ↗
           </button>
           <details class="settings">
             <summary
-              aria-label="Options audio et export"
-              title="Options audio et export"
+              aria-label="Audio and export options"
+              title="Audio and export options"
             >
               ☷
             </summary>
             <div class="settings-panel">
               <label for="micSelect">Microphone</label
               ><select id="micSelect" aria-label="Microphone"></select
-              ><label for="exportPreset">Format d’export</label
+              ><label for="exportPreset">Export format</label
               ><select id="exportPreset">
                 <option value="1080p">1080p · original</option>
                 <option value="vertical-1080x1920">1080p · vertical</option>
-                <option value="square">1080p · carré</option></select
+                <option value="square">1080p · square</option></select
               ><button id="pttBtn" type="button">
-                Enregistrer une seule instruction
+                Record a single instruction
               </button>
             </div>
           </details>
         </div>
       </header>
-      <section class="workspace" aria-label="Votre montage">
+      <section class="workspace" aria-label="Your montage">
         <div class="video-heading">
-          <span id="clipTitle">Votre vidéo</span><span id="projectStatus"></span
+          <span id="clipTitle">Your video</span><span id="projectStatus"></span
           ><span id="exportStatus" role="status"></span>
         </div>
-        <section id="stage" class="stage" aria-label="Aperçu vidéo">
+        <section id="stage" class="stage" aria-label="Video preview">
           <canvas id="preview" width="1280" height="720"></canvas
           ><canvas
             id="selectionCanvas"
@@ -62,11 +62,11 @@
             aria-hidden="true"
           ></canvas>
           <div id="selectionBadge" class="selection-badge hidden">
-            <span id="selectionLabel">Détourage</span
+            <span id="selectionLabel">Cutout</span
             ><button
               id="dismissSelection"
               type="button"
-              aria-label="Fermer l’aperçu du détourage"
+              aria-label="Close the cutout preview"
             >
               ×
             </button>
@@ -75,22 +75,20 @@
           <div id="captionOverlay" class="caption-overlay hidden"></div>
           <div id="emptyState" class="empty">
             <span class="empty-symbol" aria-hidden="true">↗</span>
-            <h1>Votre idée. Votre voix. Votre montage.</h1>
-            <p>Importez une vidéo, puis dites à Muse ce que vous imaginez.</p>
-            <button type="button" id="emptyImport">Choisir une vidéo</button
-            ><span class="empty-hint">ou glissez-la ici</span>
+            <h1>Your idea. Your voice. Your cut.</h1>
+            <p>Import a video, then tell Muse what you have in mind.</p>
+            <button type="button" id="emptyImport">Choose a video</button
+            ><span class="empty-hint">or drop it here</span>
           </div>
-          <div id="dropHint" class="drop-hint hidden">
-            Déposez votre vidéo ici
-          </div>
+          <div id="dropHint" class="drop-hint hidden">Drop your video here</div>
         </section>
-        <div class="playback" aria-label="Lecture vidéo">
+        <div class="playback" aria-label="Video playback">
           <button
             id="playPauseBtn"
             class="icon-button"
             type="button"
-            aria-label="Lire"
-            title="Lire"
+            aria-label="Play"
+            title="Play"
             disabled
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -104,7 +102,7 @@
             max="0"
             step="0.001"
             value="0"
-            aria-label="Position dans la vidéo"
+            aria-label="Position in the video"
             disabled
           /><span id="durationTime" class="time">0:00</span>
           <div class="history-actions">
@@ -112,16 +110,16 @@
               id="undoBtn"
               class="icon-button"
               type="button"
-              aria-label="Annuler le montage"
-              title="Annuler"
+              aria-label="Undo the edit"
+              title="Undo"
             >
               ↶</button
             ><button
               id="redoBtn"
               class="icon-button"
               type="button"
-              aria-label="Rétablir le montage"
-              title="Rétablir"
+              aria-label="Redo the edit"
+              title="Redo"
             >
               ↷
             </button>
@@ -130,10 +128,10 @@
         <div
           id="clipList"
           class="clip-list"
-          aria-label="Plans du montage"
+          aria-label="Shots in the montage"
         ></div>
       </section>
-      <section class="conversation" aria-label="Parlez à votre monteur">
+      <section class="conversation" aria-label="Talk to your editor">
         <div class="muse" aria-hidden="true">
           <canvas id="museCanvas"></canvas>
         </div>
@@ -141,34 +139,31 @@
           <div class="reply-header">
             <span class="muse-name">Muse</span
             ><span id="agentStatus" class="agent-status" role="status"
-              >À votre écoute</span
+              >Listening</span
             >
             <details class="conversation-history">
-              <summary
-                aria-label="Historique de la conversation"
-                title="Historique"
-              >
+              <summary aria-label="Conversation history" title="History">
                 ↗
               </summary>
               <div id="chatLog" class="chat-log" role="log"></div>
             </details>
           </div>
           <p id="replyLine" class="reply-line" aria-live="polite">
-            Qu’est-ce qu’on crée ensemble ?
+            What are we making?
           </p>
           <form id="chatForm" class="chat-form">
             <input
               id="chatInput"
               type="text"
               autocomplete="off"
-              aria-label="Instruction à Muse"
-              placeholder="Détoure le personnage, montre-moi le moment où…"
+              aria-label="Instruction for Muse"
+              placeholder="Cut out the subject, show me the moment when…"
             /><button
               id="chatSendBtn"
               class="send-button"
               type="submit"
-              aria-label="Envoyer l’instruction"
-              title="Envoyer"
+              aria-label="Send the instruction"
+              title="Send"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 19V5m-6 6 6-6 6 6" />
@@ -178,17 +173,17 @@
               class="talk"
               type="button"
               aria-pressed="false"
-              title="Ouvrir la conversation vocale"
+              title="Open the voice conversation"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="9" y="3" width="6" height="12" rx="3" />
                 <path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg
-              ><span class="talk-label">Parler</span>
+              ><span class="talk-label">Talk</span>
             </button>
           </form>
           <div class="conversation-foot">
             <span id="voiceStatus" role="status"
-              >Un clic sur le micro, puis parlez librement.</span
+              >Click the mic, then just talk.</span
             >
           </div>
           <p id="errorText" class="error" role="alert"></p>

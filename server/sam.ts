@@ -240,7 +240,7 @@ async function segmentVideo(
         {
           if (payload.type === "response.failed" || payload.type === "error") {
             throw new Error(
-              "Le service de suivi n’a pas pu traiter cet extrait. Essayez un passage plus court avec l’objet bien visible.",
+              "The tracking service could not handle this clip. Try a shorter range with the object clearly visible.",
             );
           }
           if (
@@ -269,13 +269,13 @@ async function segmentVideo(
     }
     if (!completed)
       throw new Error(
-        "Le suivi a été interrompu avant sa fin. Le masque précédent reste en place.",
+        "Tracking was interrupted before it finished. The previous mask stays in place.",
       );
     return { text, billedFrames };
   } catch (error) {
     if (controller.signal.aborted)
       throw new Error(
-        "Le suivi de cet extrait a dépassé deux minutes. Choisissez un passage plus court.",
+        "Tracking this clip went past two minutes. Pick a shorter range.",
       );
     throw error;
   } finally {

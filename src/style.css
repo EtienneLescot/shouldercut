@@ -909,7 +909,7 @@ body[data-working="true"] .agent-status:before {
 }
 
 /* === The interface gets out of the way ==============================
-   "On parle au-dessus de l'épaule de son monteur": the video is the
+   "You talk over your editor's shoulder": the video is the
    screen, and everything else is a whisper on top of it that leaves when
    nobody is pointing at it. Nothing is removed -- every control is still
    one mouse move away -- it just stops competing with the picture.

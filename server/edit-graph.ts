@@ -140,7 +140,7 @@ export class EditGraph {
       )
     ) {
       throw new Error(
-        "Le projet sauvegardé contient un clip indisponible ou un passage invalide.",
+        "The saved project points at a missing clip or an invalid range.",
       );
     }
     this.project = JSON.parse(JSON.stringify(state.project));

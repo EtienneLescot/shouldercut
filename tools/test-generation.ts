@@ -19,7 +19,7 @@ test("missing reference fails before a job or expensive preprocessing exists", (
     );
   }
   assert.equal(manager.list().length, 0);
-  assert.throws(() => validateEditInputs("vace", undefined, false), /Détourez/);
+  assert.throws(() => validateEditInputs("vace", undefined, false), /Cut out/);
 });
 
 test("Kling text-only edits never reference an imaginary image", () => {
