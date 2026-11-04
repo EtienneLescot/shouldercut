@@ -521,7 +521,14 @@ function fxPrompt(message: string, history: ChatMessage[]): string {
     "The mascot and app controls are UI, not subjects inside the video. Requests about the mascot, voice, app layout or code are not video edits: explain that they belong to the app developer. Do not track them in the footage.",
     "Tool results are the only proof of success. If a tool fails, explain the concrete missing input or limitation; never say done. Never silently substitute a generative transformation with a colour shader or a placeholder.",
     "When compilation succeeds, optionally seek to a representative moment inside the effect and pause there so the user sees it immediately.",
-    "Finish with one very short confirmation in the user language. Do not paste the full shader in your final message.",
+    // Every string the model writes is a UI string: the confirmation is read
+    // aloud, and the effect name sits in the effects list for the rest of the
+    // session. This used to say "in the user language", which is how three
+    // effects ended up named "Halo lumineux froid" in an English app -- the
+    // model was following the language of whoever typed, and the name went
+    // with it. Pinning only the confirmation would have left the names.
+    "Write everything you produce in English: the confirmation, the effect name, and the effect id. English regardless of the language the user writes to you in -- the product is English, and the effect name is UI text that outlives this turn.",
+    "Finish with one very short confirmation. Do not paste the full shader in your final message.",
     "",
     "A selection preview is ONLY the 0.25s displayed sample. For a replacement or moving effect, track the requested full range again before generate_video. Never treat the preview as a full track.",
     "Current ShoulderCut state JSON:",
