@@ -4,6 +4,7 @@ import {
   ACCESS_HEADER,
   accessVerdict,
   readCookie,
+  requestAuthority,
   sameOrigin,
   ungated,
 } from "./access.ts";
@@ -186,7 +187,7 @@ function firstHeader(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 function originAllowed(req: IncomingMessage): boolean {
-  return sameOrigin(req.headers.origin, req.headers.host);
+  return sameOrigin(req.headers.origin, requestAuthority(req.headers));
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

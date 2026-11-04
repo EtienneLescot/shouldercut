@@ -111,6 +111,30 @@ export function readCookie(
  * and keeps saying it behind a tailnet name, a Funnel URL, a different
  * port, or whatever we put in front of it next.
  */
+/**
+ * The authority the request actually arrived on, whichever protocol
+ * carried it.
+ *
+ * HTTP/2 has no Host header. The authority travels in the `:authority`
+ * pseudo-header instead, and Node does not synthesise `host` from it, so
+ * `headers.host` is simply absent. sameOrigin then saw no host, refused,
+ * and every instruction came back 403 -- but only over https, because a
+ * browser on plain http stays on HTTP/1.1 and still sends Host. That is
+ * why localhost looked fine and nothing else did.
+ *
+ * Reading both here, once, is what keeps the next protocol or proxy from
+ * reintroducing it: callers ask for the authority and never touch a
+ * header name.
+ */
+export function requestAuthority(headers: {
+  host?: string | string[];
+  ":authority"?: string | string[];
+}): string | null {
+  const first = (v: string | string[] | undefined): string | null =>
+    Array.isArray(v) ? (v[0] ?? null) : (v ?? null);
+  return first(headers[":authority"]) ?? first(headers.host);
+}
+
 export function sameOrigin(
   origin: string | undefined | null,
   host: string | undefined | null,

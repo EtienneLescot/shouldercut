@@ -4,6 +4,7 @@ import {
   ACCESS_COOKIE,
   accessVerdict,
   readCookie,
+  requestAuthority,
   sameOrigin,
   ungated,
 } from "../server/access.ts";
@@ -121,4 +122,39 @@ test("the liveness probe answers without a key, and nothing else does", () => {
     "/api/health/../project",
   ])
     assert.equal(ungated(route), false, route + " must stay behind the gate");
+});
+
+// HTTP/2 has no Host header: the authority arrives as :authority instead.
+// Missing that meant sameOrigin saw no host and refused every request, so
+// the editor answered 403 to each instruction over https while plain-http
+// localhost -- which stays on HTTP/1.1 -- looked perfectly healthy.
+
+test("the authority is read whichever protocol carried it", () => {
+  assert.equal(requestAuthority({ host: "127.0.0.1:5173" }), "127.0.0.1:5173");
+  assert.equal(requestAuthority({ ":authority": "box.ts.net:5173" }), "box.ts.net:5173");
+  assert.equal(requestAuthority({}), null, "neither header present");
+});
+
+test("the HTTP/2 pseudo-header wins when both are present", () => {
+  // A proxy can set both; :authority is the one HTTP/2 actually routed on.
+  assert.equal(
+    requestAuthority({ host: "stale.example", ":authority": "box.ts.net:5173" }),
+    "box.ts.net:5173",
+  );
+});
+
+test("a repeated header does not become an array comparison", () => {
+  assert.equal(requestAuthority({ host: ["a.example", "b.example"] }), "a.example");
+  assert.equal(requestAuthority({ ":authority": [] }), null);
+});
+
+test("an HTTP/2 request from the page is same-origin", () => {
+  // The exact shape that was returning 403: right origin, no Host at all.
+  const headers = { ":authority": "box.tail1234.ts.net:5173" };
+  assert.ok(sameOrigin("https://box.tail1234.ts.net:5173", requestAuthority(headers)));
+  assert.equal(
+    sameOrigin("https://evil.example", requestAuthority(headers)),
+    false,
+    "and a foreign origin is still refused over HTTP/2",
+  );
 });
