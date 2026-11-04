@@ -51,6 +51,7 @@ One `MODEL_API_KEY`, four services, each doing a distinct job:
 | [docs/operations.md](docs/operations.md) | What runs, what it costs, who pays |
 | [docs/remote-access.md](docs/remote-access.md) | Letting someone else drive your editor |
 | [docs/dogfooding.md](docs/dogfooding.md) | The harness that measures every backend |
+| [docs/demo-script.md](docs/demo-script.md) | The three-minute demo, line by line |
 | [AGENTS.md](AGENTS.md) | How changes get made here: fix the class, never the case |
 
 Status: submitted 4 November 2026, feature-complete on the P0 scope, every
