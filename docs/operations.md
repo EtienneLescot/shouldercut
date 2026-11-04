@@ -65,11 +65,17 @@ Model weights are pinned off `C:` — `.env` sets `HF_HOME`, `HF_HUB_CACHE`,
 
 ## Remote access
 
-One key in front of the whole server (`server/access.ts`,
-`docs/remote-access.md`), HTTPS from a real Let's Encrypt certificate issued
-for `desktop-p9n59g5.tail7f967f.ts.net` and valid to 2 February 2027.
-Verified end to end: the app loads, WebCodecs, WebGPU and the microphone all
-work.
+Not part of how this project is delivered: the submission has no live-URL
+field, and anyone running it stands it up themselves with Docker Compose.
+The machinery is still here because it costs nothing to keep -- set
+`SHOULDERCUT_ACCESS_KEY` and one key guards every route (`server/access.ts`),
+point `SHOULDERCUT_TLS_CERT` at a certificate and the server speaks HTTPS,
+which a remote browser needs or it loses WebCodecs, WebGPU and the
+microphone. `docs/remote-access.md` has the detail.
+
+No host name here names a real machine on purpose. A public repository is
+the wrong place to point at someone’s computer, even by a name that a
+certificate transparency log already carries.
 
 ## Is it enough for thousands of testers?
 
