@@ -1,5 +1,11 @@
 import "./style.css";
 import { setupRealtimeVoice } from "./voice";
+import {
+  transportWindow,
+  toShotTime,
+  toMediaTime,
+  type TransportWindow,
+} from "./transport";
 import { createMascot, type MascotState } from "./mascot";
 import { createWorkTrail } from "./worktrail";
 import type {
@@ -27,6 +33,7 @@ const pttBtn = document.querySelector<HTMLButtonElement>("#pttBtn");
 const voiceStatus = document.querySelector<HTMLElement>("#voiceStatus");
 const captionOverlay = document.querySelector<HTMLElement>("#captionOverlay");
 const clipList = document.querySelector<HTMLElement>("#clipList");
+const shotsBtn = document.querySelector<HTMLButtonElement>("#shotsBtn");
 const projectStatus = document.querySelector<HTMLElement>("#projectStatus");
 const undoBtn = document.querySelector<HTMLButtonElement>("#undoBtn");
 const redoBtn = document.querySelector<HTMLButtonElement>("#redoBtn");
@@ -55,6 +62,7 @@ if (
   !voiceStatus ||
   !captionOverlay ||
   !clipList ||
+  !shotsBtn ||
   !projectStatus ||
   !undoBtn ||
   !redoBtn ||
@@ -239,40 +247,65 @@ function postRenderResult(
   }).catch(() => undefined);
 }
 
+/** A generated clip is stored as "generated:<job>", which is a key, not a
+ *  name. One owner for the label, so the list and the heading agree. */
+function clipLabel(name: string): string {
+  return name.startsWith("generated:") ? "New version" : name;
+}
+
+function cell(className: string, text: string): HTMLSpanElement {
+  const node = document.createElement("span");
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+
 function renderProject(next: ProjectPayload): void {
   project = next;
   const total = next.clips.reduce((sum, c) => sum + (c.out - c.in), 0);
   projectStatus!.textContent = next.clips.length
     ? next.clips.length +
-      (next.clips.length > 1 ? " plans" : " plan") +
+      (next.clips.length > 1 ? " shots" : " shot") +
       " · " +
       formatTime(total)
     : "";
   document.body.dataset.projectClips = String(next.clips.length);
-  clipList!.replaceChildren();
   exportBtn!.disabled = !next.clips.length;
-  if (next.clips.length < 2) return;
-  for (const clip of next.clips) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className =
-      "clip-item" + (clip.id === activeClipId ? " active" : "");
-    // The strip is a ribbon of shots, each as wide as it is long. Equal
-    // chips read as tabs and say nothing about the shape of the montage.
-    // The floor keeps a one-second shot from collapsing to a sliver.
-    button.style.setProperty(
-      "--span",
-      String(Math.max(0.35, clip.out - clip.in)),
-    );
-    button.textContent =
-      next.clips.indexOf(clip) +
-      1 +
-      " · " +
-      (clip.name.startsWith("generated:") ? "Nouvelle version" : clip.name);
-    button.title = clip.name;
-    button.addEventListener("click", () => previewClip(clip.id, false));
-    clipList!.append(button);
-  }
+  // One button in the transport, a native popover behind it. The strip this
+  // replaces gave every shot a block as wide as the shot was long, which
+  // read as a history bar rather than as a list you can pick from.
+  const index = next.clips.findIndex((c) => c.id === activeClipId);
+  shotsBtn!.textContent =
+    index >= 0
+      ? "Shot " + (index + 1) + " of " + next.clips.length
+      : next.clips.length + " shots";
+  // A single shot is nothing to choose between, so neither the button nor
+  // an open popover has anything to say.
+  shotsBtn!.hidden = next.clips.length < 2;
+  if (shotsBtn!.hidden) clipList!.togglePopover(false);
+  clipList!.replaceChildren(
+    ...next.clips.map((clip, i) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      const active = clip.id === activeClipId;
+      button.className = "clip-item" + (active ? " active" : "");
+      if (active) button.setAttribute("aria-current", "true");
+      button.append(
+        cell("shot-name", i + 1 + " · " + clipLabel(clip.name)),
+        cell("shot-length", formatTime(clip.out - clip.in)),
+      );
+      button.title = clip.name;
+      // Hide before previewing: previewClip re-renders this list, and a
+      // `popovertargetaction="hide"` button cannot close anything once it
+      // has been replaced. Closing here also hands focus back to the
+      // button that opened it.
+      button.addEventListener("click", () => {
+        clipList!.togglePopover(false);
+        previewClip(clip.id, false);
+      });
+      return button;
+    }),
+  );
 }
 
 function previewClip(clipId: string, autoplay: boolean): void {
@@ -296,7 +329,7 @@ async function loadProjectClip(
     const response = await fetch(
       "/api/clips/" + encodeURIComponent(clip.id) + "/source",
     );
-    if (!response.ok) throw new Error("Impossible de recharger ce clip.");
+    if (!response.ok) throw new Error("Could not reload this clip.");
     file = new File([await response.blob()], clip.name, { type: "video/mp4" });
     filesByHash.set(clip.hash, file);
   }
@@ -534,6 +567,7 @@ function drawSelection(state: PlayerState): void {
 
 let currentState: PlayerState | null = null;
 let scrubbing = false;
+let scrubTarget: number | null = null;
 let lastBridgeStateAt = 0;
 const chatHistory: { role: string; text: string }[] = [];
 const activeEffects = new Map<string, ShaderEffectDefinition>();
@@ -554,6 +588,40 @@ function formatTime(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "0:00";
   const seconds = Math.max(0, Math.floor(value));
   return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+}
+
+function shotWindow(): TransportWindow {
+  const clip = activeClip();
+  // The duration on screen is only this clip's while the player holds this
+  // clip's file. Between two shots it still describes the previous one, and
+  // clamping to it would collapse the bar to nothing.
+  const sameFile = !clip || currentState?.fileName === clip.name;
+  return transportWindow(
+    sameFile ? (currentState?.duration ?? null) : null,
+    clip,
+  );
+}
+/** The one place the position is written, so the three things that show it
+ *  cannot disagree. */
+function paintTransport(at: number, length: number): void {
+  timeline!.min = "0";
+  timeline!.max = String(length);
+  timeline!.value = String(at);
+  currentTime.textContent = formatTime(at);
+  durationTime.textContent = formatTime(length);
+  timeline!.style.setProperty(
+    "--progress",
+    (length > 0 ? Math.min(100, Math.max(0, (at / length) * 100)) : 0) + "%",
+  );
+}
+/** At most one scrub seek in flight: the worker runs commands one after the
+ *  other, so one seek per pointermove queues seconds of catch-up. The newest
+ *  target wins, and renderState re-drives this on every state message. */
+function flushScrubSeek(): void {
+  if (scrubTarget === null || currentState?.phase === "seeking") return;
+  const time = scrubTarget;
+  scrubTarget = null;
+  send({ type: "seek", time });
 }
 function setControlsEnabled(enabled: boolean): void {
   playPauseBtn!.disabled = !enabled;
@@ -822,7 +890,7 @@ function connectBridge(): void {
           );
           send({ type: "seek", time });
           await ready;
-        } else throw new Error("Commande de lecture invalide.");
+        } else throw new Error("Invalid playback command.");
       } catch (error) {
         ok = false;
         message = error instanceof Error ? error.message : String(error);
@@ -852,30 +920,24 @@ function renderState(state: PlayerState): void {
   const ready = ["ready", "playing", "paused", "ended"].includes(state.phase);
   setControlsEnabled(ready);
   const playing = state.phase === "playing";
-  playPauseBtn!.setAttribute("aria-label", playing ? "Pause" : "Lire");
-  playPauseBtn!.title = playing ? "Pause" : "Lire";
+  playPauseBtn!.setAttribute("aria-label", playing ? "Pause" : "Play");
+  playPauseBtn!.title = playing ? "Pause" : "Play";
   playIcon.setAttribute(
     "d",
     playing ? "M7 5h4v14H7Zm7 0h4v14h-4Z" : "m9 5 11 7-11 7Z",
   );
-  clipTitle.textContent = state.fileName?.startsWith("generated:")
-    ? "Nouvelle version"
-    : state.fileName || "Your video";
-  currentTime.textContent = formatTime(state.mediaTime);
-  durationTime.textContent = formatTime(state.duration);
-  const clip = activeClip();
-  timeline!.min = String(clip?.in || 0);
-  timeline!.max = String(clip?.out || state.duration);
-  if (!scrubbing) timeline!.value = String(state.mediaTime);
-  const min = Number(timeline!.min),
-    max = Number(timeline!.max);
-  timeline!.style.setProperty(
-    "--progress",
-    Math.min(
-      100,
-      Math.max(0, ((state.mediaTime - min) / Math.max(0.01, max - min)) * 100),
-    ) + "%",
+  clipTitle.textContent = state.fileName
+    ? clipLabel(state.fileName)
+    : "Your video";
+  // A live drag owns the bar: the handle, the clock and the fill follow the
+  // pointer, and the playing position is ignored until the seek is
+  // committed. The clock used to keep counting under the moving handle.
+  const shot = shotWindow();
+  paintTransport(
+    scrubbing ? Number(timeline!.value) : toShotTime(state.mediaTime, shot),
+    shot.length,
   );
+  flushScrubSeek();
   drawSelection(state);
   // Keep action/provider errors visible until the next explicit request.
 }
@@ -1072,13 +1134,32 @@ function seekFromInputs(value: number): void {
 timeline.addEventListener("pointerdown", () => {
   scrubbing = true;
 });
-timeline.addEventListener("pointerup", () => {
-  scrubbing = false;
+// Dragging shows where you are going: the clock and the fill repaint here
+// because a paused player sends no state messages, and the picture follows
+// one coalesced seek at a time.
+timeline.addEventListener("input", () => {
+  scrubbing = true;
+  const shot = shotWindow();
+  const at = Number(timeline.value);
+  paintTransport(at, shot.length);
+  scrubTarget = toMediaTime(at, shot);
+  flushScrubSeek();
 });
-timeline.addEventListener("change", () => {
+/** Every drag ends in pointerup or pointercancel, and `change` may fire on
+ *  either side of them -- or never, when the value did not move. So the flag
+ *  dies on all three and the committed seek reads the bar first: clearing it
+ *  on pointerup alone let a state message overwrite the value before
+ *  `change` read it, and a cancelled drag left it stuck true for the rest of
+ *  the session, with the handle no longer following playback. */
+function endScrub(): void {
+  if (!scrubbing) return;
+  const at = Number(timeline!.value);
   scrubbing = false;
-  seekFromInputs(Number(timeline.value));
-});
+  scrubTarget = null;
+  seekFromInputs(toMediaTime(at, shotWindow()));
+}
+for (const event of ["pointerup", "pointercancel", "change"])
+  timeline.addEventListener(event, endScrub);
 undoBtn.addEventListener("click", () => {
   void editOp("undo").catch((error: unknown) => {
     errorText!.textContent =
@@ -1228,7 +1309,7 @@ micSelect.addEventListener("change", () => {
     /* private window */
   }
   voiceStatus!.textContent =
-    "Micro : " + (micSelect!.selectedOptions[0]?.textContent || "");
+    "Microphone: " + (micSelect!.selectedOptions[0]?.textContent || "");
 });
 void refreshMics();
 navigator.mediaDevices.addEventListener?.(
@@ -1282,7 +1363,7 @@ pttBtn.addEventListener("click", () => {
       mediaRecorder.addEventListener("stop", () => {
         stream.getTracks().forEach((t) => t.stop());
         if (talkLabel)
-          talkLabel.textContent = "Enregistrer une seule instruction";
+          talkLabel.textContent = "Record a single instruction";
         pttBtn.disabled = true;
         // Never pay for transcribing silence, and say which input was dead:
         // a switched-off wireless headset still opens and streams zeros.
@@ -1336,7 +1417,7 @@ pttBtn.addEventListener("click", () => {
             }
             const reply = payload.reply || "Done.";
             addChatMessage("agent", reply);
-            voiceStatus.textContent = "Vous : " + (payload.transcript || "");
+            voiceStatus.textContent = "You: " + (payload.transcript || "");
             setUiState("done");
             const spoken = reply.split(/(?<=[.!?])\s/)[0].slice(0, 180);
             if (spoken && "speechSynthesis" in window) {

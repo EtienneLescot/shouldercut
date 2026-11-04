@@ -102,9 +102,18 @@
             max="0"
             step="0.001"
             value="0"
-            aria-label="Position in the video"
+            aria-label="Position in the shot"
             disabled
-          /><span id="durationTime" class="time">0:00</span>
+          /><span id="durationTime" class="time">0:00</span
+          ><button
+            id="shotsBtn"
+            class="shots-button"
+            type="button"
+            popovertarget="clipList"
+            hidden
+          >
+            Shots
+          </button>
           <div class="history-actions">
             <button
               id="undoBtn"
@@ -125,9 +134,14 @@
             </button>
           </div>
         </div>
+        <!-- Outside .playback: the transport fades out when nobody is
+             pointing at it, and pointer-events are inherited, so a panel
+             living inside it would be unclickable the moment it opened. -->
         <div
           id="clipList"
           class="clip-list"
+          popover
+          role="group"
           aria-label="Shots in the montage"
         ></div>
       </section>

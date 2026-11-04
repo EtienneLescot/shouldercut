@@ -405,31 +405,81 @@ summary::-webkit-details-marker {
 #timeline:focus-visible {
   outline-offset: 8px;
 }
-.clip-list {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  flex-shrink: 0;
-  padding: 0 0 9px;
-  scrollbar-width: thin;
+/* The shots are one button in the transport and a native popover behind it.
+   The strip this replaces gave every shot a block as wide as the shot was
+   long, stretched across the picture: eleven of them, five sharing a name,
+   which reads as a history bar rather than a list you can pick from. */
+.shots-button {
+  anchor-name: --shots;
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: rgba(242, 239, 232, 0.72);
+  border-color: rgba(233, 220, 196, 0.18);
 }
-.clip-list:empty {
-  display: none;
+.shots-button:hover {
+  background: rgba(233, 220, 196, 0.2);
+}
+/* Anchored to the button, not to the viewport: the transport floats at the
+   bottom of the picture, with the conversation band under it, so a panel
+   placed from the viewport edge opens behind the conversation. */
+.clip-list[popover] {
+  position: fixed;
+  position-anchor: --shots;
+  inset: auto;
+  bottom: calc(anchor(top) + 8px);
+  right: anchor(right);
+  margin: 0;
+  gap: 2px;
+  width: min(320px, calc(100vw - 36px));
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 6px;
+  border: 1px solid rgba(233, 220, 196, 0.16);
+  border-radius: 12px;
+  background: rgba(6, 8, 10, 0.92);
+  backdrop-filter: blur(12px);
+  color: inherit;
+}
+/* Only here: an author `display` on the element itself beats the UA's
+   `[popover]:not(:popover-open) { display: none }`, which would leave the
+   list on screen with no way to close it. */
+.clip-list:popover-open {
+  display: grid;
 }
 .clip-item {
-  font-size: 11px;
-  max-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(242, 239, 232, 0.72);
+}
+.clip-item:hover {
+  background: rgba(233, 220, 196, 0.14);
+}
+.clip-item.active {
+  background: rgba(233, 220, 196, 0.26);
+  color: #fff;
+}
+.shot-name {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: #8995a5;
 }
-.clip-item.active {
-  background: #223149;
-  color: #bed8ff;
-  border-color: #3c5c87;
+.shot-length {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.clip-item.active .shot-length {
+  color: rgba(242, 239, 232, 0.8);
 }
 .conversation {
   display: flex;
@@ -670,9 +720,6 @@ body[data-working="true"] .agent-status:before {
   }
   .video-heading {
     height: 26px;
-  }
-  .clip-item {
-    max-width: 150px;
   }
   .topbar-actions {
     gap: 4px;
@@ -932,10 +979,12 @@ body[data-working="true"] .agent-status:before {
   object-fit: contain;
 }
 
-/* Chrome that fades: the top bar, the transport, the clip strip. */
+/* Chrome that fades: the top bar, the transport, the heading. The shot
+   popover is not in it: it lives in the top layer and only exists while you
+   are using it, so fading it out after three idle seconds would take the
+   list away mid-choice. */
 .topbar,
 .playback,
-.clip-list,
 .video-heading {
   transition: opacity 0.5s ease, transform 0.5s ease;
 }
@@ -945,7 +994,6 @@ body[data-chrome="quiet"] .topbar {
   pointer-events: none;
 }
 body[data-chrome="quiet"] .playback,
-body[data-chrome="quiet"] .clip-list,
 body[data-chrome="quiet"] .video-heading {
   opacity: 0;
   transform: translateY(6px);
@@ -964,7 +1012,7 @@ body[data-working="true"] .video-heading {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .topbar, .playback, .clip-list, .video-heading { transition: none; }
+  .topbar, .playback, .video-heading { transition: none; }
 }
 
 /* The picture gets the room the chrome was holding. The workspace capped
@@ -1069,16 +1117,6 @@ body[data-working="true"] .video-heading {
   z-index: 5;
   height: auto;
 }
-.clip-list {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 56px;
-  z-index: 5;
-  padding: 0;
-  gap: 3px;
-  overflow: visible;
-}
 .playback {
   position: absolute;
   left: 18px;
@@ -1090,29 +1128,6 @@ body[data-working="true"] .video-heading {
   border-radius: 12px;
   background: rgba(6, 8, 10, 0.72);
   backdrop-filter: blur(12px);
-}
-
-/* The montage reads as a ribbon of shots, each as wide as it is long.
-   The chips it replaces looked like tabs and said nothing about length. */
-.clip-item {
-  flex: var(--span, 1);
-  min-width: 0;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 4px;
-  border-color: rgba(233, 220, 196, 0.16);
-  background: rgba(233, 220, 196, 0.14);
-  color: rgba(242, 239, 232, 0.62);
-  text-align: left;
-  max-width: none;
-}
-.clip-item:hover {
-  background: rgba(233, 220, 196, 0.24);
-}
-.clip-item.active {
-  background: rgba(233, 220, 196, 0.32);
-  border-color: rgba(233, 220, 196, 0.45);
-  color: #fff;
 }
 
 /* --- the conversation is the product, so it keeps its own band ----- */
@@ -1208,10 +1223,10 @@ body[data-working="true"] .muse {
   color: var(--cream);
 }
 
-/* The trail sat at the bottom of the stage, which is now where the clip
-   ribbon and the transport float: measured at y 643-699 with both on top
-   of it, so the one thing built to fill the wait was the one thing you
-   could not see. It rides above them. */
+/* The trail sat at the bottom of the stage, which is now where the
+   transport floats: measured at y 643-699 with the transport and the old
+   shot strip on top of it, so the one thing built to fill the wait was the
+   one thing you could not see. It rides above them. */
 .work-trail {
   bottom: 94px;
   z-index: 5;
